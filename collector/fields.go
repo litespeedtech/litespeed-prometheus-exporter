@@ -1,0 +1,38 @@
+package collector
+
+const (
+	versionField    = "VERSION"
+	uptimeField     = "UPTIME"
+	bpsInField      = "BPS_IN"
+	bpsOutField     = "BPS_OUT"
+	sslBpsInField   = "SSL_BPS_IN"
+	sslBpsOutField  = "SSL_BPS_OUT"
+	maxConnField    = "MAXCONN"
+	maxSslConnField = "MAXSSL_CONN"
+	plainconnField  = "PLAINCONN"
+	availConnField  = "AVAILCONN"
+	idleconnField   = "IDLECONN"
+	sslconnField    = "SSLCONN"
+	availSslField   = "AVAILSSL"
+	/* reqRate fields are registered with Prometheus with reqRateField prefix */
+	reqRateField                       = "REQ_RATE"
+	reqRateReqProcessingField          = "REQ_PROCESSING"
+	reqRateReqPerSecField              = "REQ_PER_SEC"
+	reqRateTotReqsField                = "TOT_REQS"
+	reqRatePubCacheHitsPerSecField     = "PUB_CACHE_HITS_PER_SEC"
+	reqRateTotalPubCacheHitsField      = "TOTAL_PUB_CACHE_HITS"
+	reqRatePrivateCacheHitsPerSecField = "PRIVATE_CACHE_HITS_PER_SEC"
+	reqRateTotalPrivateCacheHitsField  = "TOTAL_PRIVATE_CACHE_HITS"
+	reqRateStaticHitsPerSecField       = "STATIC_HITS_PER_SEC"
+	reqRateTotalStaticHitsField        = "TOTAL_STATIC_HITS"
+	/* extapp fields are registered with Prometheus with extappField prefix */
+	extappField             = "EXTAPP"
+	extappCmaxconnField     = "CMAXCONN"
+	extappEmaxconnField     = "EMAXCONN"
+	extappPoolSizeField     = "POOL_SIZE"
+	extappInuseConnField    = "INUSE_CONN"
+	extappIdleConnField     = "IDLE_CONN"
+	extappWaitqueDepthField = "WAITQUE_DEPTH"
+	extappReqPerSecField    = "REQ_PER_SEC"
+	extappTotReqsField      = "TOT_REQS"
+)
