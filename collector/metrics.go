@@ -35,7 +35,7 @@ var (
 			sslBpsInField:   newGeneralInfoMetric("incoming_ssl_bytes_per_second", sslBpsInField, "Incoming number of bytes per second using SSL (HTTPS)", prometheus.GaugeValue),
 			sslBpsOutField:  newGeneralInfoMetric("outgoing_ssl_bytes_per_second", sslBpsOutField, "Outgoing number of bytes per second using SSL (HTTPS)", prometheus.GaugeValue),
 			maxConnField:    newGeneralInfoMetric("maximum_http_connections", maxConnField, "Maximum configured http connections", prometheus.CounterValue),
-			maxSslConnField: newGeneralInfoMetric("maximum ssl_connections", maxSslConnField, "Maximum configured ssl (https) connections", prometheus.CounterValue),
+			maxSslConnField: newGeneralInfoMetric("maximum_ssl_connections", maxSslConnField, "Maximum configured ssl (https) connections", prometheus.CounterValue),
 			plainconnField:  newGeneralInfoMetric("current_http_connections", plainconnField, "Current number of http connections", prometheus.GaugeValue),
 			availConnField:  newGeneralInfoMetric("available_connections", availConnField, "Available number of connections", prometheus.GaugeValue),
 			idleconnField:   newGeneralInfoMetric("current_idle_connections", idleconnField, "Current number of idle connections", prometheus.GaugeValue),
@@ -100,7 +100,7 @@ func newReqRateMetric(name, scrapeName, help string, t prometheus.ValueType) met
 		Desc: prometheus.NewDesc(
 			prometheus.BuildFQName(namespace, "", name+"_per_vhost"),
 			help+" per virtual host",
-			[]string{"core", "hostname"},
+			[]string{"core", "vhost"},
 			nil,
 		),
 		Type: t,
@@ -109,12 +109,12 @@ func newReqRateMetric(name, scrapeName, help string, t prometheus.ValueType) met
 
 func newExtappMetric(name, scrapeName, help string, t prometheus.ValueType) metricInfo {
 	return metricInfo{
-		Name:       name + "_per_backend",
+		Name:       name + "_per_app",
 		ScrapeName: extappField + "_" + scrapeName,
 		Desc: prometheus.NewDesc(
-			prometheus.BuildFQName(namespace, "", name+"_per_backend"),
-			help+" per backend",
-			[]string{"core", "service", "hostname", "handler"},
+			prometheus.BuildFQName(namespace, "", name+"_per_app"),
+			help+" per app",
+			[]string{"core", "app_type", "vhost", "app_name"},
 			nil,
 		),
 		Type: t,

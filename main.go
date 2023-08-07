@@ -3,11 +3,10 @@ package main
 /*
 Copyright © 2023 LiteSpeed Technologies <litespeedtech.com>
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
+Licensed under the GPLv3 License (the "License"); you may not use this file
+except in compliance with the License.  You may obtain a copy of the License at
 
-    http://www.apache.org/licenses/LICENSE-2.0
+    https://www.gnu.org/licenses/gpl-3.0.en.html
 
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
@@ -22,6 +21,7 @@ import (
 	"math/rand"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -30,6 +30,11 @@ import (
 	"k8s.io/klog/v2"
 
 	"github.com/rperper/lsws-prometheus-exporter.git/collector"
+)
+
+const (
+	pid_directory = "/tmp/lsws-prometheus-exporter"
+	pid_filename  = "lsws-prometheus-exporter.pid"
 )
 
 var (
@@ -79,27 +84,40 @@ func main() {
 	rootCmd.Flags().StringVar(&metricsExcludedList, "metrics-excluded-list", metricsExcludedList,
 		`Specify a comma separated list of metrics to exclude, using the LiteSpeed scaped name`)
 	rootCmd.Flags().StringVar(&tlsCertFile, "tls-cert-file", tlsCertFile,
-		`If you want to require http to access metrics you must specify a tls-cert-file and a tls-key-file which are PEM encoded files`)
+		`If you want to require https to access metrics you must specify a tls-cert-file and a tls-key-file which are PEM encoded files`)
 	rootCmd.Flags().StringVar(&tlsKeyFile, "tls-key-file", tlsKeyFile,
-		`If you want to require http to access metrics you must specify a tls-cert-file and a tls-key-file which are PEM encoded files`)
+		`If you want to require https to access metrics you must specify a tls-cert-file and a tls-key-file which are PEM encoded files`)
 
 	if err := rootCmd.Execute(); err != nil {
 		klog.Exitf("Exiting due to command-line error: %v", err)
 	}
-	klog.V(4).Infof("About to exit main")
 	klog.V(4).Infof("Exiting main()")
 }
 
 func run(cmd *cobra.Command, args []string) {
-	//klog.Infof("Using build: %v - v%v", gitRepo, version)
-
+	klog.V(4).Infof("Using build: %v - v%v", gitRepo, version)
+	if (tlsCertFile != "" && tlsKeyFile == "") || (tlsCertFile == "" && tlsKeyFile != "") {
+		klog.Exitf("You must specify BOTH tls-cert-file AND tls-key-file if you specify either")
+	}
+	if tlsCertFile != "" {
+		if _, err := os.Open(tlsCertFile); err != nil {
+			klog.Exitf("The tls-cert-file can't be opened: %v", err)
+		}
+		if _, err := os.Open(tlsKeyFile); err != nil {
+			klog.Exitf("The tls-key-file can't be opened: %v", err)
+		}
+		klog.V(4).Info("Access will be via https only")
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	//defer cancel()
 
 	go handleSigterm(cancel)
 
+	createPid()
+
 	collector.Run(ctx, metricsServiceAddr, metricsServicePath, metricsExcludedList, tlsCertFile, tlsKeyFile)
 
+	deletePid()
 	klog.V(4).Infof("main run terminating")
 }
 
@@ -111,4 +129,14 @@ func handleSigterm(cancel context.CancelFunc) {
 	klog.Infof("Received signal: %v, shutting down", sig)
 	cancel()
 	klog.V(4).Infof("In handleSigterm terminating")
+}
+
+func createPid() {
+	os.Mkdir(pid_directory, 0755)
+	os.WriteFile(pid_directory+"/"+pid_filename, []byte(strconv.Itoa(os.Getpid())), 0644)
+}
+
+func deletePid() {
+	os.Remove(pid_directory + "/" + pid_filename)
+	os.Remove(pid_directory)
 }

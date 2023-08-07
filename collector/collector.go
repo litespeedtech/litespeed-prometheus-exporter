@@ -1,11 +1,10 @@
 /*
 Copyright © 2023 LiteSpeed Technologies <litespeedtech.com>
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
+Licensed under the GPLv3 License (the "License"); you may not use this file
+except in compliance with the License.  You may obtain a copy of the License at
 
-    http://www.apache.org/licenses/LICENSE-2.0
+    https://www.gnu.org/licenses/gpl-3.0.en.html
 
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
@@ -73,7 +72,7 @@ func Run(ctx context.Context, addr, metricsPath, metricsExcludedList, tlsCertFil
 	)
 	prometheus.MustRegister(collector)
 
-	klog.V(4).Infof("listenAddr", addr)
+	klog.V(4).Infof("listenAddr: %v", addr)
 
 	http.Handle(metricsPath, promhttp.Handler())
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -101,11 +100,11 @@ func Run(ctx context.Context, addr, metricsPath, metricsExcludedList, tlsCertFil
 
 	if tlsCertFile != "" && tlsKeyFile != "" {
 		if err := srv.ListenAndServeTLS(tlsCertFile, tlsKeyFile); err != nil {
-			klog.Errorf("Could not start HTTPS server for Prometheus support: %v", err)
+			klog.Errorf("Exited HTTPS server for Prometheus support: %v", err)
 		}
 	} else {
 		if err := srv.ListenAndServe(); err != nil {
-			klog.Errorf("Could not start HTTP server for Prometheus support: %v", err)
+			klog.Errorf("Exited HTTP server for Prometheus support: %v", err)
 		}
 	}
 	klog.V(4).Infof("Exiting collector.Run()")
@@ -143,11 +142,11 @@ func cleanupBadFiles(baseFile, pattern string) {
 	}
 	for _, file := range matches {
 		thisStat, err1 := os.Stat(file)
-		if err1 == nil {
-			klog.V(4).Infof("Skip %v for %v", file, err1)
+		if err1 != nil {
+			klog.V(4).Infof("Skip during cleanup bad files %v for %v", file, err1)
 			continue
 		}
-		if baseStat.ModTime().Unix() > thisStat.ModTime().Unix() {
+		if baseStat.ModTime().Unix() != thisStat.ModTime().Unix() {
 			klog.Infof("Deleting old realtime file: %v", file)
 			os.Remove(file)
 		}
@@ -156,6 +155,9 @@ func cleanupBadFiles(baseFile, pattern string) {
 
 func (c *LitespeedCollector) metricIsTracked(flag string) bool {
 	_, ok := c.options.ExcludedMetrics[flag]
+	if ok {
+		klog.V(4).Infof("Exclude metric: %v", flag)
+	}
 	return !ok
 }
 
@@ -253,7 +255,7 @@ func (c *LitespeedCollector) collectReports(ch chan<- prometheus.Metric) error {
 func (c *LitespeedCollector) collectGeneralInfoMetrics(core string, generalInfo generalInfoReport, ch chan<- prometheus.Metric) {
 	for flag, value := range generalInfo.KeyValues {
 		if metric, ok := LitespeedMetrics.generalInfoMetrics[flag]; ok {
-			//klog.V(4).Infof("generalInfoMetric: %v", metric)
+			klog.V(4).Infof("generalInfoMetric: %v", metric)
 			ch <- prometheus.MustNewConstMetric(metric.Desc, metric.Type, value, core)
 		}
 	}
@@ -263,7 +265,7 @@ func (c *LitespeedCollector) collectReqRateMetrics(core string, reports []reques
 	for _, rrReport := range reports {
 		for flag, value := range rrReport.KeyValues {
 			if metric, ok := LitespeedMetrics.reqRateMetrics[flag]; ok {
-				//klog.V(4).Infof("reqRateMetric: %v", metric)
+				klog.V(4).Infof("reqRateMetric: %v, value: %v, core: %v", metric, value, core)
 				ch <- prometheus.MustNewConstMetric(metric.Desc, metric.Type, value, core, rrReport.VHost)
 			}
 		}
@@ -274,7 +276,7 @@ func (c *LitespeedCollector) collectExtAppMetrics(core string, reports []externa
 	for _, eaReport := range reports {
 		for flag, value := range eaReport.KeyValues {
 			if metric, ok := LitespeedMetrics.extAppMetrics[flag]; ok {
-				//klog.V(4).Infof("extAppMetric: %v", metric)
+				klog.V(4).Infof("extAppMetric: %v, value: %v, core: %v", metric, value, core)
 				ch <- prometheus.MustNewConstMetric(metric.Desc, metric.Type, value, core, eaReport.AppType, eaReport.VHost, eaReport.Handler)
 			}
 		}
