@@ -28,8 +28,6 @@ stopExporter
 ./rc-uninst.sh
 rm -rf $LSWS_HOME
 
-echo
-echo -e "\033[38;5;148mLiteSpeed Web Server Prometheus Exporter uninstalled\033[39m"
-echo
+printf "\n\033[38;5;148mLiteSpeed Web Server Prometheus Exporter uninstalled\033[39m\n"
 
 

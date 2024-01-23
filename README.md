@@ -171,3 +171,8 @@ The exporter writes its errors and important messages to standard output.  If yo
 ## Building the Exporter
 
 The exporter is built using the included Makefile.  If there's a change, update the script with the new version number.  If you wish to build the full package, make sure that `STAGING` is set to `0`; with staging set to `1` only the binary will be built.
+
+## Notable changes
+
+### 0.0.2 
+- [Feature] The install.sh script supports a "-n" flag to disable SSL file prompts.

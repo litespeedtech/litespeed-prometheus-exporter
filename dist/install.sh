@@ -6,6 +6,15 @@ OSVER=
 DLCMD=
 LSPHPVER=74
 MYIP=
+NOHTTPS=0
+
+help()
+{
+    printf 'LiteSpeed Prometheus Exporter installation script\n'
+    printf 'Form: sudo ./install.sh [-n]\n'
+    printf 'Where "-n" is an optional parameteter for no HTTPS mode\n'
+    exit 1
+}
 
 #script start here
 cd `dirname "$0"`
@@ -16,6 +25,16 @@ if [ $? != 0 ] ; then
 fi
 if [ "$#" != "0" ]; then
     SERVER_ADDR=$1
+fi
+
+if [ $# -ne 0 ]; then
+    while getopts ":n" flag
+    do
+        case "${flag}" in 
+            n)  NOHTTPS=1;;
+            \?) help;;
+        esac
+    done
 fi
 
 #If install.sh in admin/misc, need to change directory
@@ -31,11 +50,12 @@ if [ -f "$LSWS_HOME/lsws-prometheus-exporter" ] ; then
     INSTALL_TYPE="upgrade"
     stopExporter
 else
-    getCerts
+    if [ $NOHTTPS -eq 0 ]; then
+        getCerts
+    fi
 fi
 
 echo "INSTALL_TYPE is $INSTALL_TYPE"
-
 echo "LSINSTALL_DIR:$LSINSTALL_DIR "
 
 installation
@@ -45,9 +65,6 @@ if [ $INSTALL_TYPE = "install" ]; then
     service lsws-prometheus-exporter start
 fi
    
-
-echo
-echo -e "\033[38;5;148mInstallation finished, Enjoy!\033[39m"
-echo
+printf "\n\033[38;5;148mInstallation finished, Enjoy!\033[39m\n"
 
 
