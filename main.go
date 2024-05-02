@@ -25,11 +25,10 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/litespeedtech/litespeed-prometheus-exporter/collector"
 	"github.com/spf13/cobra"
 
 	"k8s.io/klog/v2"
-
-	"github.com/rperper/lsws-prometheus-exporter.git/collector"
 )
 
 const (

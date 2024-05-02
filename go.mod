@@ -1,4 +1,4 @@
-module github.com/rperper/lsws-prometheus-exporter.git
+module github.com/litespeedtech/litespeed-prometheus-exporter
 
 go 1.16
 
@@ -8,4 +8,4 @@ require (
 	k8s.io/klog/v2 v2.80.1
 )
 
-replace github.com/rperper/lsws-prometheus-exporter/collector => ./collector
+replace github.com/litespeedtech/litespeed-prometheus-exporter/collector => ./collector
