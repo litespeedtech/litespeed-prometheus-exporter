@@ -1,5 +1,5 @@
 /*
-Copyright © 2023 LiteSpeed Technologies <litespeedtech.com>
+Copyright © 2023-2024 LiteSpeed Technologies <litespeedtech.com>
 
 Licensed under the GPLv3 License (the "License"); you may not use this file
 except in compliance with the License.  You may obtain a copy of the License at
@@ -21,7 +21,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -49,6 +48,8 @@ type LitespeedCollectorOpts struct {
 	MetricsByCore   bool
 	ExcludeExtapp   bool
 	ExcludedMetrics map[string]bool // external name is the key
+	CgroupTry       int
+	LitespeedHome   string
 }
 
 // LitespeedCollector collects LiteSpeed stats from the given files and exports them as Prometheus metrics
@@ -56,9 +57,10 @@ type LitespeedCollector struct {
 	mutex                        sync.RWMutex
 	options                      LitespeedCollectorOpts
 	totalScrapes, scrapeFailures prometheus.Counter
+	litespeedCollectorCgroup     *LitespeedCollectorCgroup
 }
 
-func Run(ctx context.Context, addr, metricsPath, metricsExcludedList, tlsCertFile, tlsKeyFile string) {
+func Run(ctx context.Context, addr, metricsPath, metricsExcludedList, tlsCertFile, tlsKeyFile string, cgroupTry int, litespeedHome string) {
 	excludedMetricFlags := strings.Split(metricsExcludedList, ",")
 	collector := NewLitespeedCollector(
 		LitespeedCollectorOpts{
@@ -68,6 +70,8 @@ func Run(ctx context.Context, addr, metricsPath, metricsExcludedList, tlsCertFil
 			MetricsByCore:   true,
 			ExcludeExtapp:   false,
 			ExcludedMetrics: ParseFlagsToMap(excludedMetricFlags),
+			CgroupTry:       cgroupTry,
+			LitespeedHome:   litespeedHome,
 		},
 	)
 	prometheus.MustRegister(collector)
@@ -114,7 +118,7 @@ func Run(ctx context.Context, addr, metricsPath, metricsExcludedList, tlsCertFil
 // NewLitespeedCollector returns constructed collector
 func NewLitespeedCollector(opts LitespeedCollectorOpts) *LitespeedCollector {
 	cleanupBadFiles(opts.BaseFile, opts.FilePattern)
-	return &LitespeedCollector{
+	collector := &LitespeedCollector{
 		options: opts,
 		totalScrapes: prometheus.NewCounter(prometheus.CounterOpts{
 			Namespace: namespace,
@@ -127,6 +131,8 @@ func NewLitespeedCollector(opts LitespeedCollectorOpts) *LitespeedCollector {
 			Help:      "Number of errors while scraping files.",
 		}),
 	}
+	collector.litespeedCollectorCgroup = NewLitespeedCollectorCgroup(collector)
+	return collector
 }
 
 func cleanupBadFiles(baseFile, pattern string) {
@@ -180,6 +186,9 @@ func (c *LitespeedCollector) Describe(ch chan<- *prometheus.Desc) {
 			ch <- metric.Desc
 		}
 	}
+	if c.litespeedCollectorCgroup.enabled {
+		c.litespeedCollectorCgroup.cgroupDescribe(ch)
+	}
 	ch <- litespeedVersion
 	ch <- litespeedUp
 	ch <- c.totalScrapes.Desc()
@@ -196,6 +205,11 @@ func (c *LitespeedCollector) Collect(ch chan<- prometheus.Metric) {
 
 	up := getUpStatus("/tmp/lshttpd/lshttpd.pid")
 	c.collectReports(ch)
+	if c.litespeedCollectorCgroup.enabled {
+		if err := c.litespeedCollectorCgroup.cgroupCollect(ch); err != nil {
+			klog.Errorf("Error in collecting cgroup data: ", err)
+		}
+	}
 
 	ch <- prometheus.MustNewConstMetric(litespeedUp, prometheus.GaugeValue, up)
 	ch <- c.totalScrapes
@@ -204,7 +218,7 @@ func (c *LitespeedCollector) Collect(ch chan<- prometheus.Metric) {
 }
 
 func getUpStatus(pidFile string) float64 {
-	data, err := ioutil.ReadFile(pidFile)
+	data, err := os.ReadFile(pidFile)
 	if err != nil {
 		return 0
 	}

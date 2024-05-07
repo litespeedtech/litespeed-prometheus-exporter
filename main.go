@@ -1,7 +1,7 @@
 package main
 
 /*
-Copyright © 2023 LiteSpeed Technologies <litespeedtech.com>
+Copyright © 2023-2024 LiteSpeed Technologies <litespeedtech.com>
 
 Licensed under the GPLv3 License (the "License"); you may not use this file
 except in compliance with the License.  You may obtain a copy of the License at
@@ -48,6 +48,9 @@ var (
 	metricsExcludedList = ""
 	tlsCertFile         = ""
 	tlsKeyFile          = ""
+	// Cgroup command-line flags
+	cgroupTry     = 1
+	litespeedHome = "/usr/local/lsws"
 	// Status
 	ready = false
 )
@@ -87,6 +90,10 @@ func main() {
 	rootCmd.Flags().StringVar(&tlsKeyFile, "tls-key-file", tlsKeyFile,
 		`If you want to require https to access metrics you must specify a tls-cert-file and a tls-key-file which are PEM encoded files`)
 
+	rootCmd.Flags().IntVar(&cgroupTry, "cgroups", cgroupTry,
+		`Whether cgroups v2 user information will be collected.  0 requests disabling, 1 requests enabling if cgroups v2 and LiteSpeed Containers are enabled`)
+	rootCmd.Flags().StringVar(&litespeedHome, "litespeed-home", litespeedHome, `Home directory for LiteSpeed.  Defaults to /usr/local/lsws`)
+
 	if err := rootCmd.Execute(); err != nil {
 		klog.Exitf("Exiting due to command-line error: %v", err)
 	}
@@ -107,6 +114,9 @@ func run(cmd *cobra.Command, args []string) {
 		}
 		klog.V(4).Info("Access will be via https only")
 	}
+	if cgroupTry < 0 || cgroupTry > 2 {
+		klog.Exitf("Invalid cgroups value: %v", cgroupTry)
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	//defer cancel()
 
@@ -114,7 +124,7 @@ func run(cmd *cobra.Command, args []string) {
 
 	createPid()
 
-	collector.Run(ctx, metricsServiceAddr, metricsServicePath, metricsExcludedList, tlsCertFile, tlsKeyFile)
+	collector.Run(ctx, metricsServiceAddr, metricsServicePath, metricsExcludedList, tlsCertFile, tlsKeyFile, cgroupTry, litespeedHome)
 
 	deletePid()
 	klog.V(4).Infof("main run terminating")

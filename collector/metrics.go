@@ -22,6 +22,7 @@ type metrics struct {
 	generalInfoMetrics metricMap
 	reqRateMetrics     metricMap
 	extAppMetrics      metricMap
+	cgroupMetrics      metricMap
 }
 
 var (
@@ -62,6 +63,18 @@ var (
 			extappWaitqueDepthField: newExtappMetric("wait_queue_depth", extappWaitqueDepthField, "Depth of the waiting queue", prometheus.GaugeValue),
 			extappReqPerSecField:    newExtappMetric("requests_per_second", extappReqPerSecField, "Number of requests per second", prometheus.GaugeValue),
 			extappTotReqsField:      newExtappMetric("total_requests", extappTotReqsField, "Total number of requests", prometheus.CounterValue),
+		},
+		cgroupMetrics: metricMap{
+			cgroupName(cpu_prefix, usage_usec):        newCgroupMetric(cpu_prefix, usage_usec, "Total CPU usage in microseconds", prometheus.CounterValue),
+			cgroupName(cpu_prefix, user_usec):         newCgroupMetric(cpu_prefix, user_usec, "User-space CPU usage in microseconds", prometheus.CounterValue),
+			cgroupName(cpu_prefix, system_usec):       newCgroupMetric(cpu_prefix, system_usec, "System-space CPU usage in microseconds", prometheus.CounterValue),
+			cgroupName(io_prefix, rbytes):             newCgroupMetric(io_prefix, rbytes, "Total bytes read", prometheus.CounterValue),
+			cgroupName(io_prefix, wbytes):             newCgroupMetric(io_prefix, wbytes, "Total bytes written", prometheus.CounterValue),
+			cgroupName(io_prefix, rios):               newCgroupMetric(io_prefix, rios, "Number of reads", prometheus.CounterValue),
+			cgroupName(io_prefix, wios):               newCgroupMetric(io_prefix, wios, "Number of writes", prometheus.CounterValue),
+			cgroupName(memory_prefix, memory_current): newCgroupMetric(memory_prefix, memory_current, "Total amount of memory currently being used", prometheus.GaugeValue),
+			cgroupName(memory_prefix, swap_current):   newCgroupMetric(memory_prefix, swap_current, "Total amount of swap memory currently being used", prometheus.GaugeValue),
+			cgroupName(pids_prefix, pids_current):     newCgroupMetric(pids_prefix, pids_current, "Total number of tasks active", prometheus.GaugeValue),
 		},
 	}
 	litespeedVersion = prometheus.NewDesc(prometheus.BuildFQName(namespace, "", "version"), "A metric with a constant '1' value labeled by the LiteSpeed version.", []string{"version"}, nil)
