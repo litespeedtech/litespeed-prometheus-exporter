@@ -1,7 +1,7 @@
 # VERSION is defined here and placed in the program.
 # STAGING should be set to 1 or 0 and defines which docker repo the image is pushed to.
 VERSION="0.1.0"
-STAGING="0"
+STAGING="1"
 REPO_INFO="https://github.com/litespeed-prometheus-exporter/-/tree/master"
 TAG=latest
 
