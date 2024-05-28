@@ -24,6 +24,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"k8s.io/klog/v2"
 
@@ -43,27 +44,37 @@ type prefixMetricNameMap map[string]metricNameMap
 /* Note that this is a subset of all of the possible stats, but I'm only going to collect the ones I like. */
 const (
 	/* registered with Prometheus with the 'cpu' prefix and scraped from cpu.stat. */
-	cpu_prefix  = "cpu"
-	usage_usec  = "usage_usec"
-	user_usec   = "user_usec"
-	system_usec = "system_usec"
+	cpu_prefix          = "cpu"
+	usage_usec          = "usage_usec"
+	user_usec           = "user_usec"
+	system_usec         = "system_usec"
+	cpu_loadavg_percent = "loadavg_percent" // Generated only on the root
+	cpu_diff            = "diff"            // Generated
+	cpu_us_percent      = "percent"         // Generated
 	/* registered with Prometheus with the 'io' prefix and scraped from io.stat. */
-	io_prefix = "io"
-	rbytes    = "rbytes"
-	wbytes    = "wbytes"
-	rios      = "rios"
-	wios      = "wios"
+	io_prefix  = "io"
+	rbytes     = "rbytes"
+	wbytes     = "wbytes"
+	rios       = "rios"
+	wios       = "wios"
+	per_sec    = "per_sec"    // Generated
+	op_per_sec = "op_per_sec" // Generated
 	/* registered with Prometheus with the 'memory' prefix and scraped from memory.* files. */
 	memory_prefix  = "memory"
 	memory_current = "current"
 	swap_current   = "swap_bytes"
+	memory_percent = "percent" // Generated
 	/* registered with Prometheus with the 'pids' prefix and scraped from pids.* files. */
 	pids_prefix  = "pids"
 	pids_current = "current"
+	pids_percent = "percent" // Generated
 )
 
 var (
 	metricNames prefixMetricNameMap
+	reportsLast map[string]CgroupReport
+	didLast     = false
+	lastTime    time.Time
 )
 
 type MetricVal struct {
@@ -144,16 +155,23 @@ func addCgroupMetrics() {
 	metricNames[cpu_prefix][usage_usec] = newCgroupMetric(cpu_prefix, "microseconds", usage_usec, "Total CPU usage in microseconds", prometheus.CounterValue)
 	metricNames[cpu_prefix][user_usec] = newCgroupMetric(cpu_prefix, "user_microseconds", user_usec, "User-space CPU usage in microseconds", prometheus.CounterValue)
 	metricNames[cpu_prefix][system_usec] = newCgroupMetric(cpu_prefix, "system_microseconds", system_usec, "Kernel-space CPU usage in microseconds", prometheus.CounterValue)
+	metricNames[cpu_prefix][cpu_loadavg_percent] = newCgroupMetric(cpu_prefix, "loadavg_percent", cpu_loadavg_percent, "CPU usage reported by /proc/loadavg for the last minute", prometheus.GaugeValue)
+	metricNames[cpu_prefix][cpu_diff] = newCgroupMetric(cpu_prefix, "difference_microseconds", cpu_diff, "CPU difference in the last interval in microseconds", prometheus.GaugeValue)
+	metricNames[cpu_prefix][cpu_us_percent] = newCgroupMetric(cpu_prefix, "percent", cpu_us_percent, "CPU usage as a percent of microseconds used", prometheus.GaugeValue)
 	metricNames[io_prefix] = make(metricNameMap)
 	metricNames[io_prefix][rbytes] = newCgroupMetric(io_prefix, "read_bytes", rbytes, "Total bytes read", prometheus.CounterValue)
 	metricNames[io_prefix][wbytes] = newCgroupMetric(io_prefix, "write_bytes", wbytes, "Total bytes written", prometheus.CounterValue)
 	metricNames[io_prefix][rios] = newCgroupMetric(io_prefix, "reads_total", rios, "Total number of reads", prometheus.CounterValue)
 	metricNames[io_prefix][wios] = newCgroupMetric(io_prefix, "writes_total", wios, "Total number of writes", prometheus.CounterValue)
+	metricNames[io_prefix][per_sec] = newCgroupMetric(io_prefix, "bytes_per_second", per_sec, "read and written bytes per second", prometheus.GaugeValue)
+	metricNames[io_prefix][op_per_sec] = newCgroupMetric(io_prefix, "op_per_second", op_per_sec, "read and write operations per second", prometheus.GaugeValue)
 	metricNames[memory_prefix] = make(metricNameMap)
 	metricNames[memory_prefix][memory_current] = newCgroupMetric(memory_prefix, "bytes", memory_current, "Total amount of memory currently being used", prometheus.GaugeValue)
 	metricNames[memory_prefix][swap_current] = newCgroupMetric(memory_prefix, "swap_bytes", swap_current, "Amount of swap memory currently being used", prometheus.GaugeValue)
+	metricNames[memory_prefix][memory_percent] = newCgroupMetric(memory_prefix, "percent", memory_percent, "Memory usage as a percent", prometheus.GaugeValue)
 	metricNames[pids_prefix] = make(metricNameMap)
 	metricNames[pids_prefix][pids_current] = newCgroupMetric(pids_prefix, "total", pids_current, "Total number of tasks active", prometheus.GaugeValue)
+	metricNames[pids_prefix][pids_percent] = newCgroupMetric(pids_prefix, "percent", pids_percent, "Number of tasks active as a percent", prometheus.GaugeValue)
 }
 
 func NewLitespeedCollectorCgroup(collector *LitespeedCollector) *LitespeedCollectorCgroup {
@@ -227,7 +245,7 @@ func (c *LitespeedCollectorCgroup) scrapeCPU(dir string, report *CgroupReport) e
 			metricVal.prefix = cpu_prefix
 			metricVal.info = metricNames[cpu_prefix][parts[0]]
 			metricVal.val = val
-			report.KeyValues[cpu_prefix+parts[0]] = metricVal
+			report.KeyValues[cgroupName(cpu_prefix, parts[0])] = metricVal
 		}
 	}
 
@@ -277,16 +295,16 @@ func (c *LitespeedCollectorCgroup) scrapeIO(dir string, report *CgroupReport) er
 					return err
 				}
 				klog.V(4).Infof("scrapeIO, adding %v: %v", equalParts[0], newVal)
-				if metricVal, ok := report.KeyValues[io_prefix+equalParts[0]]; ok {
+				if metricVal, ok := report.KeyValues[cgroupName(io_prefix, equalParts[0])]; ok {
 					metricVal.prefix = io_prefix
 					metricVal.val = newVal + metricVal.val
 					metricVal.info = metricNames[io_prefix][equalParts[0]]
-					report.KeyValues[io_prefix+equalParts[0]] = metricVal
+					report.KeyValues[cgroupName(io_prefix, equalParts[0])] = metricVal
 				} else {
 					metricVal.prefix = io_prefix
 					metricVal.val = newVal
 					metricVal.info = metricNames[io_prefix][equalParts[0]]
-					report.KeyValues[io_prefix+equalParts[0]] = metricVal
+					report.KeyValues[cgroupName(io_prefix, equalParts[0])] = metricVal
 				}
 			}
 		}
@@ -321,7 +339,7 @@ func (c *LitespeedCollectorCgroup) scrapeReports(uid string, reports map[string]
 	metricVal.prefix = memory_prefix
 	metricVal.val = val
 	metricVal.info = metricNames[memory_prefix][memory_current]
-	report.KeyValues[memory_prefix+memory_current] = metricVal
+	report.KeyValues[cgroupName(memory_prefix, memory_current)] = metricVal
 	val, err = readStatFile(dir + "/memory.swap.current")
 	if err != nil {
 		return err
@@ -329,7 +347,7 @@ func (c *LitespeedCollectorCgroup) scrapeReports(uid string, reports map[string]
 	metricVal.prefix = memory_prefix
 	metricVal.val = val
 	metricVal.info = metricNames[memory_prefix][swap_current]
-	report.KeyValues[memory_prefix+swap_current] = metricVal
+	report.KeyValues[cgroupName(memory_prefix, swap_current)] = metricVal
 	val, err = readStatFile(dir + "/pids.current")
 	if err != nil {
 		return err
@@ -337,7 +355,7 @@ func (c *LitespeedCollectorCgroup) scrapeReports(uid string, reports map[string]
 	metricVal.prefix = pids_prefix
 	metricVal.val = val
 	metricVal.info = metricNames[pids_prefix][pids_current]
-	report.KeyValues[pids_prefix+pids_current] = metricVal
+	report.KeyValues[cgroupName(pids_prefix, pids_current)] = metricVal
 	if uid == "" {
 		var uids []string
 		reports[rootUID] = report
@@ -368,6 +386,117 @@ func (c *LitespeedCollectorCgroup) scrapeReports(uid string, reports map[string]
 	return nil
 }
 
+func getDiff(reports map[string]CgroupReport, uid, prefix, field string) float64 {
+	fullname := cgroupName(prefix, field)
+	return reports[uid].KeyValues[fullname].val - reportsLast[uid].KeyValues[fullname].val
+}
+
+func getDiffReport(reportLast CgroupReport, reports map[string]CgroupReport, uid, prefix, field string) float64 {
+	fullname := cgroupName(prefix, field)
+	return reports[uid].KeyValues[fullname].val - reportLast.KeyValues[fullname].val
+}
+
+func assignPercent(root float64, uid, prefix, field, source string, reportLast CgroupReport, reports map[string]CgroupReport) {
+	var metricVal MetricVal
+	metricVal.prefix = prefix
+	metricVal.info = metricNames[prefix][field]
+	hits := getDiffReport(reportLast, reports, uid, prefix, source)
+	if root != 0 {
+		metricVal.val = hits * 100 / root
+	} else {
+		metricVal.val = 0
+	}
+	reports[uid].KeyValues[cgroupName(prefix, field)] = metricVal
+}
+
+func assignPercentRoot(uid, prefix, field, source string, reports map[string]CgroupReport) {
+	var metricVal MetricVal
+	metricVal.prefix = prefix
+	metricVal.info = metricNames[prefix][field]
+	fullname := cgroupName(prefix, source)
+	root := reports[rootUID].KeyValues[fullname].val
+	if root != 0 {
+		metricVal.val = reports[uid].KeyValues[fullname].val * 100 / root
+	} else {
+		metricVal.val = 0
+	}
+	reports[uid].KeyValues[cgroupName(prefix, field)] = metricVal
+}
+
+func addLoadAvg(reports map[string]CgroupReport) error {
+	dat, err := os.ReadFile("/proc/loadavg")
+	if err != nil {
+		return err
+	}
+	var val float64
+	line := string(dat[:])
+	line = strings.TrimRight(line, "\n")
+	parts := strings.Split(line, " ")
+	val, err = strconv.ParseFloat(parts[0], 64)
+	if err != nil {
+		return err
+	}
+	var metricVal MetricVal
+	metricVal.prefix = cpu_prefix
+	metricVal.info = metricNames[cpu_prefix][cpu_loadavg_percent]
+	metricVal.val = val * 100
+	reports[rootUID].KeyValues[cgroupName(cpu_prefix, cpu_loadavg_percent)] = metricVal
+	return err
+}
+
+func assignDiff(uid, prefix, field, source string, reportLast CgroupReport, reports map[string]CgroupReport) {
+	var metricVal MetricVal
+	metricVal.prefix = prefix
+	metricVal.info = metricNames[prefix][field]
+	hits := getDiffReport(reportLast, reports, uid, prefix, source)
+	metricVal.val = hits
+	klog.V(4).Infof("cgroup diff uid: %v, diff %v", uid, hits)
+	reports[uid].KeyValues[cgroupName(prefix, field)] = metricVal
+}
+
+func assignUsPercent(diffTime time.Duration, uid, prefix, field, source string, reportLast CgroupReport, reports map[string]CgroupReport) {
+	var metricVal MetricVal
+	metricVal.prefix = prefix
+	metricVal.info = metricNames[prefix][field]
+	hits := getDiffReport(reportLast, reports, uid, prefix, source)
+	u, _ := time.ParseDuration(diffTime.String())
+	metricVal.val = hits * 100 / float64(u.Microseconds())
+	klog.V(4).Infof("cgroup us_percent uid: %v, diff %v, final percent: %v", uid, hits, metricVal.val)
+	reports[uid].KeyValues[cgroupName(prefix, field)] = metricVal
+}
+
+func assignPerSec(diffTime time.Duration, uid, prefix, field, source1, source2 string, reportLast CgroupReport, reports map[string]CgroupReport) {
+	var metricVal MetricVal
+	metricVal.prefix = prefix
+	metricVal.info = metricNames[prefix][field]
+	hits := getDiffReport(reportLast, reports, uid, prefix, source1) + getDiffReport(reportLast, reports, uid, prefix, source2)
+	u, _ := time.ParseDuration(diffTime.String())
+	metricVal.val = hits / float64(u.Seconds())
+	klog.V(4).Infof("cgroup %v uid: %v, diff %v, final: %v", field, uid, hits, metricVal.val)
+	reports[uid].KeyValues[cgroupName(prefix, field)] = metricVal
+}
+
+func calcReports(reports map[string]CgroupReport) {
+	now := time.Now()
+	if didLast {
+		diffTime := now.Sub(lastTime)
+		addLoadAvg(reports)
+		for uid, reportLast := range reportsLast {
+			assignDiff(uid, cpu_prefix, cpu_diff, usage_usec, reportLast, reports)
+			assignUsPercent(diffTime, uid, cpu_prefix, cpu_us_percent, usage_usec, reportLast, reports)
+			assignPerSec(diffTime, uid, io_prefix, per_sec, rbytes, wbytes, reportLast, reports)
+			assignPerSec(diffTime, uid, io_prefix, op_per_sec, rios, wios, reportLast, reports)
+			if uid != rootUID {
+				assignPercentRoot(uid, memory_prefix, memory_percent, memory_current, reports)
+				assignPercentRoot(uid, pids_prefix, pids_percent, pids_current, reports)
+			}
+		}
+	}
+	lastTime = now
+	didLast = true
+	reportsLast = reports
+}
+
 func (c *LitespeedCollectorCgroup) cgroupCollect(ch chan<- prometheus.Metric) error {
 	klog.V(4).Infof("cgroupCollect")
 	reports := make(map[string]CgroupReport)
@@ -378,7 +507,7 @@ func (c *LitespeedCollectorCgroup) cgroupCollect(ch chan<- prometheus.Metric) er
 		klog.V(4).Infof("scrapeReports failed: %v", err)
 		return err
 	}
-
+	calcReports(reports)
 	for uid, report := range reports {
 		for _, metricVal := range report.KeyValues {
 			if metric, ok := metricNames[metricVal.prefix][metricVal.info.ScrapeName]; ok {

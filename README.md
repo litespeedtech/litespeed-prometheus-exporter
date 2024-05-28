@@ -2,6 +2,8 @@
 
 The LiteSpeed Prometheus Exporter is a specially designed Prometheus application and uses the LiteSpeed Enterprise or the OpenLiteSpeed Web Server controller to export Prometheus compatible data which can also be used by Grafana and other compatible applications.
 
+Besides giving useful information about LiteSpeed itself, it is an integral part of the LiteSpeed Containers product, in particular in exporting to Prometheus statistical information useful about individual user's resource consumption.  If LiteSpeed Containers are activated, cgroups information will be automatically exported.
+
 ## Installation
 
 These installation instructions assume you're downloading the compressed binary and installing from there, which will work for most x64 environments.  You can also build the package from the included Makefile if you need it on another architecture.
@@ -144,6 +146,64 @@ Each Prometheus Name will include, besides the `litespeed_` prefix, a `_per_app`
 | `litespeed_total_requests_per_backend` | `TOT_REQS` | Total number of requests | Counter |
 | `litespeed_wait_queue_depth_per_backend` | `WAITQUE_DEPTH` | Depth of the waiting queue | Gauge |
 
+### CGroups metrics
+
+CGroups metrics will be exported by default if LiteSpeed Containers is enabled and the system is capable of cgroups v2.  Metrics are exported in the following form:
+
+```
+   cgroups_PREFIX_SUFFIX
+```
+
+Where PREFIX is one of the following:
+- **cpu**: CPU utilization statistics.
+- **io**: Read and write utilization statistics.
+- **memory**: Amount of memory utilization.
+- **pids**: Number of tasks.
+  
+SUFFIX names are listed in each table below.
+
+Statistics are in two forms: raw and calculated.  The calculated ones tend to be the most useful, however they are calculated using the raw statistics.
+
+You are given each statistic with a `uid` qualifier.  The `uid` of `.` is used to represent the system as a whole.  All other uids are numeric system UIDs.
+
+For example, there is an exported value `cgroups_cpu_difference_microseconds`.  It has a PREFIX of `cpu` and a SUFFIX of `difference_microseconds` and is documented below.
+
+#### CPU prefix
+
+| Suffix | Calculated | Description | Type |
+| - | - | - | - |
+| difference_microseconds | X | CPU difference in the last interval in microseconds per user | Gauge
+| loadavg_percent |   | The contents of the /proc/loadavg file for the last minute for the system as a whole.  Not available for each uid. | Gauge
+| microseconds | | Total CPU usage in microseconds per user. | Counter
+| percent | X | CPU usage as a percent of microseconds used per user. | Gauge
+| system_microseconds | | Kernel-space CPU usage in microseconds per user | Counter
+| user_microseconds | | User-space CPU usage in microseconds per user | Counter
+
+#### IO prefix
+
+| Suffix | Calculated | Description | Type |
+| - | - | - | - |
+| op_per_second | X | Read and write operations per second per user | Gauge
+| per_second | X | Read and written bytes per second per user | Gauge
+| read_bytes | | Total bytes read per user | Counter
+| reads_total | | Total number of reads per user | Counter
+| write_bytes | | Total bytes written per user | Counter
+| writes_total | | Total number of writes per user | Counter
+
+#### Memory prefix
+
+| Suffix | Calculated | Description | Type |
+| - | - | - | - |
+| bytes | | Total amount of memory currently being used per user | Gauge
+| percent | X | Memory usage as a percent per user | Gauge
+| swap_bytes | | Amount of swap memory currently being used per user | Gauge
+
+#### Pids prefix
+
+| Suffix | Calculated | Description | Type |
+| - | - | - | - |
+| percent | X | Number of tasks active as a percent per user | Gauge
+| total | | Total number of tasks active per user | Gauge
 
 ## Configuring the Prometheus Exporter
 
@@ -157,6 +217,8 @@ ExecStart=/usr/local/lsws-prometheus-exporter/lsws-prometheus-exporter --tls-cer
 
 | Name | Description | Default |
 | - | - | - |
+| `--cgroups` | Whether cgroups v2 user information will be collected.  0 requests disabling, 1 requests enabling if cgroups v2 and LiteSpeed Containers are enabled. | 1 |
+| `--litespeed-home` | Home directory for LiteSpeed, if cgroups are enabled. | /usr/local/lsws |
 | `--metrics-excluded-list` | A comma separated list of metrics to exclude, using the Prometheus name without the prefix `litespeed_`. | None |
 | `--metrics-service-addr` | The address and port to use to listen for prometheus collection requests within the pod.  Form: addr:port; a blank addr listens on all addresses. | `:9936` |
 | `--metrics-service-path` | The HTTP path to service requests on. | `/metrics` |
@@ -174,5 +236,9 @@ The exporter is built using the included Makefile.  If there's a change, update 
 
 ## Notable changes
 
+### 0.1.0
+- [Feature] Add cgroups support for LiteSpeed Containers.
+
 ### 0.0.2 
 - [Feature] The install.sh script supports a "-n" flag to disable SSL file prompts.
+
