@@ -114,7 +114,7 @@ func enable(opts *LitespeedCollectorOpts) bool {
 		klog.V(4).Infof("User requested cgroups without LS verification")
 		return true
 	}
-	if _, err := os.Stat(opts.LitespeedHome + "/conf/lscntr.txt"); err != nil {
+	if _, err := os.Stat(opts.LitespeedHome + "/lsns/conf/lscntr.txt"); err != nil {
 		klog.V(4).Infof("LiteSpeed Containers not enabled; no cgroups (%v)", err)
 		return false
 	}
