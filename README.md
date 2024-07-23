@@ -236,6 +236,10 @@ The exporter is built using the included Makefile.  If there's a change, update 
 
 ## Notable changes
 
+### 0.1.1
+- [Bug Fix] Tolerate missing cgroups io.stat file.
+- [Bug Fix] Work correctly if .tz file is exploded in place from clone.
+
 ### 0.1.0
 - [Feature] Add cgroups support for LiteSpeed Containers.
 

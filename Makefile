@@ -1,7 +1,7 @@
 # VERSION is defined here and placed in the program.
 # STAGING should be set to 1 or 0 and defines which docker repo the image is pushed to.
-VERSION="0.1.0"
-STAGING="1"
+VERSION="0.1.1"
+STAGING="0"
 REPO_INFO="https://github.com/litespeed-prometheus-exporter/-/tree/master"
 TAG=latest
 
@@ -20,9 +20,8 @@ controller:
 	echo "Building controller"
 	CGO_ENABLED=0 GOOS=linux go mod tidy
 	CGO_ENABLED=0 GOOS=linux go build -ldflags \
-		"-w -X main.version=${VERSION} -X main.gitRepo=${REPO_INFO}" \
-		-o lsws-prometheus-exporter .
-	cp lsws-prometheus-exporter dist
+		"-w -X main.version=${VERSION} -X main.gitRepo=${REPO_INFO}" .
+	cp litespeed-prometheus-exporter dist/lsws-prometheus-exporter
 
 .PHONY: package
 package:

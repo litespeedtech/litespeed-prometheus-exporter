@@ -103,19 +103,19 @@ func cgroupName(prefix, scrapeName string) string {
 
 func enable(opts *LitespeedCollectorOpts) bool {
 	if _, err := os.Stat(cgroupsDir + "/cgroup.controllers"); errors.Is(err, os.ErrNotExist) {
-		klog.V(4).Infof("Not cgroups v2")
+		klog.Infof("Not cgroups v2")
 		return false
 	}
 	if opts.CgroupTry == 0 {
-		klog.V(4).Infof("User requested no cgroups")
+		klog.Infof("User requested no cgroups")
 		return false
 	}
 	if opts.CgroupTry == 2 {
-		klog.V(4).Infof("User requested cgroups without LS verification")
+		klog.Infof("User requested cgroups without LS verification")
 		return true
 	}
 	if _, err := os.Stat(opts.LitespeedHome + "/lsns/conf/lscntr.txt"); err != nil {
-		klog.V(4).Infof("LiteSpeed Containers not enabled; no cgroups (%v)", err)
+		klog.Infof("LiteSpeed Containers not enabled; no cgroups (%v)", err)
 		return false
 	}
 	return true
@@ -260,7 +260,8 @@ func (c *LitespeedCollectorCgroup) scrapeIO(dir string, report *CgroupReport) er
 	filename := dir + "/io.stat"
 	file, err := os.Open(filename)
 	if err != nil {
-		return err
+		klog.V(4).Infof("scrapeIO, adding %v: %v", filename, err)
+		return nil // Tolerate it for now.
 	}
 
 	defer func() {
