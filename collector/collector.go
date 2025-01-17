@@ -342,7 +342,7 @@ func (c *LitespeedCollector) scrapeFile(fileName string) (report *litespeedRepor
 		case uptimeField:
 			_, v := parseKeyValPair(line, ": ")
 			report.GeneralInfo.Uptime = v
-		case bpsInField, plainconnField:
+		case bpsInField, plainconnField, maxConnField:
 			m := parseKeyValLineToMap(line)
 			for k, v := range m {
 				vf, err := parseMetricValue(k, v)
