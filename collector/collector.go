@@ -37,7 +37,7 @@ import (
 )
 
 const (
-	baseFile = "/tmp/lshttpd/.rtreport"
+	baseFile = "/dev/shm/lsws/status/.rtreport"
 )
 
 // LitespeedCollectorOpts carries the options used in LitespeedCollector
