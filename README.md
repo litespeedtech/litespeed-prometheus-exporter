@@ -219,6 +219,7 @@ ExecStart=/usr/local/lsws-prometheus-exporter/lsws-prometheus-exporter --tls-cer
 | - | - | - |
 | `--cgroups` | Whether cgroups v2 user information will be collected.  0 requests disabling, 1 requests enabling if cgroups v2 and LiteSpeed Containers are enabled. | 1 |
 | `--litespeed-home` | Home directory for LiteSpeed, if cgroups are enabled. | /usr/local/lsws |
+| `--rtReport` | The fuily qualfiied directory for the LiteSpeed real time report file.  | /tmp/lshttpd/.rtreport |
 | `--metrics-excluded-list` | A comma separated list of metrics to exclude, using the Prometheus name without the prefix `litespeed_`. | None |
 | `--metrics-service-addr` | The address and port to use to listen for prometheus collection requests within the pod.  Form: addr:port; a blank addr listens on all addresses. | `:9936` |
 | `--metrics-service-path` | The HTTP path to service requests on. | `/metrics` |
@@ -235,6 +236,9 @@ The exporter writes its errors and important messages to standard output.  If yo
 The exporter is built using the included Makefile.  If there's a change, update the script with the new version number.  If you wish to build the full package, make sure that `STAGING` is set to `0`; with staging set to `1` only the binary will be built.
 
 ## Notable changes
+
+### 0.1.3
+- Make the location of the LiteSpeed real-time report file command line configurable
 
 ### 0.1.2
 - [Bug Fix] Include missing scraped fields from the CMAXCONN line.
