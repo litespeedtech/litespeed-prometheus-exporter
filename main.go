@@ -51,6 +51,7 @@ var (
 	// Cgroup command-line flags
 	cgroupTry     = 1
 	litespeedHome = "/usr/local/lsws"
+	rtReport = "/tmp/lshttpd/.rtreport"
 	// Status
 	ready = false
 )
@@ -93,6 +94,7 @@ func main() {
 	rootCmd.Flags().IntVar(&cgroupTry, "cgroups", cgroupTry,
 		`Whether cgroups v2 user information will be collected.  0 requests disabling, 1 requests enabling if cgroups v2 and LiteSpeed Containers are enabled`)
 	rootCmd.Flags().StringVar(&litespeedHome, "litespeed-home", litespeedHome, `Home directory for LiteSpeed.  Defaults to /usr/local/lsws`)
+	rootCmd.Flags().StringVar(&rtReport, "rtreport", rtReport, `The fuily qualfiied directory for the LiteSpeed real time report file.  Defaults to /tmp/lshttpd/.rtreport`)
 
 	if err := rootCmd.Execute(); err != nil {
 		klog.Exitf("Exiting due to command-line error: %v", err)
@@ -124,7 +126,7 @@ func run(cmd *cobra.Command, args []string) {
 
 	createPid()
 
-	collector.Run(ctx, metricsServiceAddr, metricsServicePath, metricsExcludedList, tlsCertFile, tlsKeyFile, cgroupTry, litespeedHome)
+	collector.Run(ctx, metricsServiceAddr, metricsServicePath, metricsExcludedList, tlsCertFile, tlsKeyFile, cgroupTry, litespeedHome, rtReport)
 
 	deletePid()
 	klog.V(4).Infof("main run terminating")

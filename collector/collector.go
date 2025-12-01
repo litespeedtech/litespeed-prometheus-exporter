@@ -36,20 +36,16 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
-const (
-	baseFile = "/tmp/lshttpd/.rtreport"
-)
-
 // LitespeedCollectorOpts carries the options used in LitespeedCollector
 type LitespeedCollectorOpts struct {
-	BaseFile        string
-	FilePattern     string
 	ReqRatesByHost  bool
 	MetricsByCore   bool
 	ExcludeExtapp   bool
 	ExcludedMetrics map[string]bool // external name is the key
 	CgroupTry       int
 	LitespeedHome   string
+	RtReport		string
+	FilePattern     string
 }
 
 // LitespeedCollector collects LiteSpeed stats from the given files and exports them as Prometheus metrics
@@ -60,18 +56,18 @@ type LitespeedCollector struct {
 	litespeedCollectorCgroup     *LitespeedCollectorCgroup
 }
 
-func Run(ctx context.Context, addr, metricsPath, metricsExcludedList, tlsCertFile, tlsKeyFile string, cgroupTry int, litespeedHome string) {
+func Run(ctx context.Context, addr, metricsPath, metricsExcludedList, tlsCertFile, tlsKeyFile string, cgroupTry int, litespeedHome string, rtReport string) {
 	excludedMetricFlags := strings.Split(metricsExcludedList, ",")
 	collector := NewLitespeedCollector(
 		LitespeedCollectorOpts{
-			BaseFile:        baseFile,
-			FilePattern:     baseFile + "*",
 			ReqRatesByHost:  true,
 			MetricsByCore:   true,
 			ExcludeExtapp:   false,
 			ExcludedMetrics: ParseFlagsToMap(excludedMetricFlags),
 			CgroupTry:       cgroupTry,
 			LitespeedHome:   litespeedHome,
+			RtReport:		 rtReport,
+			FilePattern:     rtReport + "*",
 		},
 	)
 	prometheus.MustRegister(collector)
@@ -117,7 +113,7 @@ func Run(ctx context.Context, addr, metricsPath, metricsExcludedList, tlsCertFil
 
 // NewLitespeedCollector returns constructed collector
 func NewLitespeedCollector(opts LitespeedCollectorOpts) *LitespeedCollector {
-	cleanupBadFiles(opts.BaseFile, opts.FilePattern)
+	cleanupBadFiles(opts.RtReport, opts.FilePattern)
 	collector := &LitespeedCollector{
 		options: opts,
 		totalScrapes: prometheus.NewCounter(prometheus.CounterOpts{
@@ -135,15 +131,15 @@ func NewLitespeedCollector(opts LitespeedCollectorOpts) *LitespeedCollector {
 	return collector
 }
 
-func cleanupBadFiles(baseFile, pattern string) {
+func cleanupBadFiles(rtReport, pattern string) {
 	matches, err := filepath.Glob(pattern)
 	if err != nil {
 		klog.Errorf("Unable to get matching files for: %v: %v", pattern, err)
 		return
 	}
-	baseStat, err := os.Stat(baseFile)
+	baseStat, err := os.Stat(rtReport)
 	if err != nil {
-		klog.Errorf("Unable to get stat for base file: %v: %v", baseFile, err)
+		klog.Errorf("Unable to get stat for base file: %v: %v", rtReport, err)
 		return
 	}
 	for _, file := range matches {
