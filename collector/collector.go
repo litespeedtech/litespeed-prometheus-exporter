@@ -56,6 +56,25 @@ type LitespeedCollector struct {
 	litespeedCollectorCgroup     *LitespeedCollectorCgroup
 }
 
+// customMetricsHandler wraps the promhttp.Handler to add custom logic.
+func customMetricsHandler() http.Handler {
+	// Get the default Prometheus handler
+	h := promhttp.Handler()
+
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// You can read request headers here
+		userAgent := r.Header.Get("User-Agent")
+		authorization := r.Header.Get("Authorization")
+		klog.V(4).Infof("Metrics request received with User-Agent: %s Authorization: %s\n", userAgent, authorization)
+
+		// You can also set response headers here
+		//w.Header().Set("X-Custom-Header", "Prometheus-Metrics-Endpoint")
+
+		// Call the actual promhttp.Handler to serve the metrics
+		h.ServeHTTP(w, r)
+	})
+}
+
 func Run(ctx context.Context, addr, metricsPath, metricsExcludedList, tlsCertFile, tlsKeyFile string, cgroupTry int, litespeedHome string, rtReport string) {
 	excludedMetricFlags := strings.Split(metricsExcludedList, ",")
 	collector := NewLitespeedCollector(
@@ -74,7 +93,7 @@ func Run(ctx context.Context, addr, metricsPath, metricsExcludedList, tlsCertFil
 
 	klog.V(4).Infof("listenAddr: %v", addr)
 
-	http.Handle(metricsPath, promhttp.Handler())
+	http.Handle(metricsPath, customMetricsHandler())
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		klog.V(4).Infof("LiteSpeed Prometheus Collector default home page")
 		w.Write([]byte(`
@@ -194,7 +213,7 @@ func (c *LitespeedCollector) Describe(ch chan<- *prometheus.Desc) {
 
 // Collect fetches the stats from target files and delivers them as Prometheus metrics
 func (c *LitespeedCollector) Collect(ch chan<- prometheus.Metric) {
-	//klog.V(4).Infof("collector Collect")
+	klog.V(4).Infof("collector Collect")
 
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
