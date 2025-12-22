@@ -67,13 +67,12 @@ func customMetricsHandler() http.Handler {
 		userAgent := r.Header.Get("User-Agent")
 		authorization := r.Header.Get("Authorization")
 		klog.V(4).Infof("Metrics request received with User-Agent: %s Authorization: %s\n", userAgent, authorization)
-		if authorization != "" {
-			decodedBytes, err := base64.StdEncoding.DecodeString(authorization)
-			if err != nil {
-				http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-			} else {
-				klog.V(4).Infof("Decoded Authorization: %v\n", decodedBytes)
-			}
+		decodedBytes, err := base64.StdEncoding.DecodeString(authorization)
+		if err != nil {
+			klog.Errorf("Could not decode authorization")
+			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		} else {
+			klog.V(4).Infof("Decoded Authorization: %v\n", decodedBytes)
 		}
 
 		// You can also set response headers here
