@@ -71,22 +71,18 @@ func customMetricsHandler() http.Handler {
 		if authorization == "" {
 			klog.Errorf("Could not find authorization header")
 			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		} else if auth64, found := strings.CutPrefix(authorization, "Basic "); !found {
+			klog.Errorf("Expecting but did not find Basic authorization string")
+			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		} else if decodedBytes, err := base64.StdEncoding.DecodeString(string(auth64)); err != nil {
+			klog.Errorf("Could not decode authorization %v %v", string(auth64), err)
+			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		} else if auths := strings.SplitN(string(auth64), ":", 1); len(auths) != 2 {
+			klog.Errorf("Could not find authorization sep in %v", string(auth64))
+			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		} else {
-			auth64, found := strings.CutPrefix(authorization, "Basic ")
-			if !found {
-				klog.Errorf("Expecting but did not find Basic authorization string")
-				http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-			} else {
-				auth64Str := string(auth64)
-				decodedBytes, err := base64.StdEncoding.DecodeString(auth64Str)
-				if err != nil {
-					klog.Errorf("Could not decode authorization %v", auth64Str)
-					http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-				} else {
-					klog.V(4).Infof("Decoded Authorization: %v -> %v\n", auth64Str, string(decodedBytes))
-					ok = true
-				}
-			}
+			klog.V(4).Infof("Decoded Authorization: %v -> %v\n", string(auth64), string(decodedBytes))
+			ok = true
 		}
 
 		// You can also set response headers here
