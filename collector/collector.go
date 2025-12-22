@@ -83,7 +83,7 @@ func customMetricsHandler() http.Handler {
 					klog.Errorf("Could not decode authorization %v", auth64Str)
 					http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 				} else {
-					klog.V(4).Infof("Decoded Authorization: %v -> %v\n", auth64Str, decodedBytes)
+					klog.V(4).Infof("Decoded Authorization: %v -> %v\n", auth64Str, string(decodedBytes))
 					ok = true
 				}
 			}
