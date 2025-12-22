@@ -77,11 +77,11 @@ func customMetricsHandler() http.Handler {
 		} else if decodedBytes, err := base64.StdEncoding.DecodeString(string(auth64)); err != nil {
 			klog.Errorf("Could not decode authorization %v %v", string(auth64), err)
 			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-		} else if auths := strings.SplitN(string(auth64), ":", 1); len(auths) != 2 {
-			klog.Errorf("Could not find authorization sep in %v", string(auth64))
+		} else if auths := strings.SplitN(string(decodedBytes), ":", 1); len(auths) != 2 {
+			klog.Errorf("Could not find authorization sep in %v", string(decodedBytes))
 			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		} else {
-			klog.V(4).Infof("Decoded Authorization: %v -> %v\n", string(auth64), string(decodedBytes))
+			klog.V(4).Infof("Decoded Authorization: %v -> user: %v pwd: %v\n", string(decodedBytes), auths[0], auths[1])
 			ok = true
 		}
 
