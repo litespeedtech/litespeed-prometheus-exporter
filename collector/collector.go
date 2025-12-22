@@ -67,6 +67,7 @@ func customMetricsHandler() http.Handler {
 		userAgent := r.Header.Get("User-Agent")
 		authorization := r.Header.Get("Authorization")
 		klog.V(4).Infof("Metrics request received with User-Agent: %s Authorization: %s\n", userAgent, authorization)
+		ok := false
 		if authorization == "" {
 			klog.Errorf("Could not find authorization header")
 			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
@@ -76,12 +77,14 @@ func customMetricsHandler() http.Handler {
 				klog.Errorf("Expecting but did not find Basic authorization string")
 				http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 			} else {
-				decodedBytes, err := base64.StdEncoding.DecodeString(auth64)
+				auth64Str := string(auth64)
+				decodedBytes, err := base64.StdEncoding.DecodeString(auth64Str)
 				if err != nil {
-					klog.Errorf("Could not decode authorization")
+					klog.Errorf("Could not decode authorization %v", auth64Str)
 					http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 				} else {
-					klog.V(4).Infof("Decoded Authorization: %v\n", decodedBytes)
+					klog.V(4).Infof("Decoded Authorization: %v -> %v\n", auth64Str, decodedBytes)
+					ok = true
 				}
 			}
 		}
@@ -89,9 +92,11 @@ func customMetricsHandler() http.Handler {
 		// You can also set response headers here
 		//w.Header().Set("X-Custom-Header", "Prometheus-Metrics-Endpoint")
 
-		// Call the actual promhttp.Handler to serve the metrics
-		klog.V(4).Infof("Serving metrics")
-		h.ServeHTTP(w, r)
+		if ok {
+			// Call the actual promhttp.Handler to serve the metrics
+			klog.V(4).Infof("Serving metrics")
+			h.ServeHTTP(w, r)
+		}
 	})
 }
 
