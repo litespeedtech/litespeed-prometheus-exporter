@@ -22,6 +22,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -48,6 +49,9 @@ var (
 	metricsExcludedList = ""
 	tlsCertFile         = ""
 	tlsKeyFile          = ""
+	// Basic Auth
+	username			= ""
+	password_file		= ""
 	// Cgroup command-line flags
 	cgroupTry     = 1
 	litespeedHome = "/usr/local/lsws"
@@ -91,6 +95,11 @@ func main() {
 	rootCmd.Flags().StringVar(&tlsKeyFile, "tls-key-file", tlsKeyFile,
 		`If you want to require https to access metrics you must specify a tls-cert-file and a tls-key-file which are PEM encoded files`)
 
+	rootCmd.Flags().StringVar(&username, "username", username,
+		`To enable basic authentication you must specify a username and a secured password file`)
+	rootCmd.Flags().StringVar(&password_file, "password_file", password_file,
+		`To enable basic authentication you must specify a username and a secured password file which contains the hashed password`)
+
 	rootCmd.Flags().IntVar(&cgroupTry, "cgroups", cgroupTry,
 		`Whether cgroups v2 user information will be collected.  0 requests disabling, 1 requests enabling if cgroups v2 and LiteSpeed Containers are enabled`)
 	rootCmd.Flags().StringVar(&litespeedHome, "litespeed-home", litespeedHome, `Home directory for LiteSpeed.  Defaults to /usr/local/lsws`)
@@ -116,6 +125,18 @@ func run(cmd *cobra.Command, args []string) {
 		}
 		klog.V(4).Info("Access will be via https only")
 	}
+	if (username != "" && password_file == "") || (username == "" && password_file != "") {
+		klog.Exitf("You must specify BOTH username and password_file if you specify either")
+	}
+	password := ""
+	if password_file != "" {
+		pwd, err := os.ReadFile(password_file)
+		if err != nil {
+			klog.Exitf("Error reading password file %v: %v", password_file, err)
+		}
+		password = strings.TrimRight(string(pwd), " \t\n\r\f\v")
+		klog.V(4).Infof("Basic authentication activated with username: %v, password_file %v", username, password_file)
+	}
 	if cgroupTry < 0 || cgroupTry > 2 {
 		klog.Exitf("Invalid cgroups value: %v", cgroupTry)
 	}
@@ -126,7 +147,7 @@ func run(cmd *cobra.Command, args []string) {
 
 	createPid()
 
-	collector.Run(ctx, metricsServiceAddr, metricsServicePath, metricsExcludedList, tlsCertFile, tlsKeyFile, cgroupTry, litespeedHome, rtReport)
+	collector.Run(ctx, metricsServiceAddr, metricsServicePath, metricsExcludedList, tlsCertFile, tlsKeyFile, username, password, cgroupTry, litespeedHome, rtReport)
 
 	deletePid()
 	klog.V(4).Infof("main run terminating")

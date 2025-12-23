@@ -58,31 +58,41 @@ type LitespeedCollector struct {
 }
 
 // customMetricsHandler wraps the promhttp.Handler to add custom logic.
-func customMetricsHandler() http.Handler {
+func customMetricsHandler(username string, password string) http.Handler {
 	// Get the default Prometheus handler
 	h := promhttp.Handler()
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// You can read request headers here
 		userAgent := r.Header.Get("User-Agent")
-		authorization := r.Header.Get("Authorization")
-		klog.V(4).Infof("Metrics request received with User-Agent: %s Authorization: %s\n", userAgent, authorization)
 		ok := false
-		if authorization == "" {
-			klog.Errorf("Could not find authorization header")
-			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-		} else if auth64, found := strings.CutPrefix(authorization, "Basic "); !found {
-			klog.Errorf("Expecting but did not find Basic authorization string")
-			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-		} else if decodedBytes, err := base64.StdEncoding.DecodeString(string(auth64)); err != nil {
-			klog.Errorf("Could not decode authorization %v %v", string(auth64), err)
-			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-		} else if auths := strings.SplitN(string(decodedBytes), ":", 2); len(auths) != 2 {
-			klog.Errorf("Could not find authorization sep in %v (%v)", string(decodedBytes), auths)
-			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		if username == ""{
+			ok = true			
 		} else {
-			klog.V(4).Infof("Decoded Authorization: %v -> user: %v pwd: %v\n", string(decodedBytes), auths[0], auths[1])
-			ok = true
+			authorization := r.Header.Get("Authorization")
+			klog.V(4).Infof("Metrics request received with User-Agent: %s Authorization: %s\n", userAgent, authorization)
+			if authorization == "" {
+				klog.Errorf("Could not find authorization header")
+				http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+			} else if auth64, found := strings.CutPrefix(authorization, "Basic "); !found {
+				klog.Errorf("Expecting but did not find Basic authorization string")
+				http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+			} else if decodedBytes, err := base64.StdEncoding.DecodeString(string(auth64)); err != nil {
+				klog.Errorf("Could not decode authorization %v %v", string(auth64), err)
+				http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+			} else if auths := strings.SplitN(string(decodedBytes), ":", 2); len(auths) != 2 {
+				klog.Errorf("Could not find authorization sep in %v (%v)", string(decodedBytes), auths)
+				http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+			} else if auths[0] != username {
+				klog.Errorf("Invalid user for metrics request")
+				http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+			} else if auths[1] != password{
+				klog.Errorf("Invalid password for metrics request")
+				http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+			} else {
+				klog.V(4).Infof("Valid basic authentication")
+				ok = true
+			}
 		}
 
 		// You can also set response headers here
@@ -96,7 +106,7 @@ func customMetricsHandler() http.Handler {
 	})
 }
 
-func Run(ctx context.Context, addr, metricsPath, metricsExcludedList, tlsCertFile, tlsKeyFile string, cgroupTry int, litespeedHome string, rtReport string) {
+func Run(ctx context.Context, addr, metricsPath, metricsExcludedList, tlsCertFile, tlsKeyFile string, username string, password string, cgroupTry int, litespeedHome string, rtReport string) {
 	excludedMetricFlags := strings.Split(metricsExcludedList, ",")
 	collector := NewLitespeedCollector(
 		LitespeedCollectorOpts{
@@ -114,7 +124,7 @@ func Run(ctx context.Context, addr, metricsPath, metricsExcludedList, tlsCertFil
 
 	klog.V(4).Infof("listenAddr: %v", addr)
 
-	http.Handle(metricsPath, customMetricsHandler())
+	http.Handle(metricsPath, customMetricsHandler(username, password))
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		klog.V(4).Infof("LiteSpeed Prometheus Collector default home page")
 		w.Write([]byte(`
