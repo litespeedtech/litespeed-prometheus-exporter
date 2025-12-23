@@ -143,6 +143,33 @@ getCerts()
 }
 
 
+getBasicAuth()
+{
+    SUCC=0
+    while [ $SUCC -eq "0" ];  do
+        printf "User name for basic auth [ENTER for no basic auth]: "
+        read TMP_USER
+        if [ "x$TMP_USER" = "x" ]; then
+            echo "Basic auth will not be used"
+            SUCC=1
+        else
+            SUCC=0
+            while [ $SUCC -eq "0" ]; do
+                printf "Password file name: "
+                read TMP_PASS
+                if [ ! -f "$TMP_PASS" ]; then
+                    echo "You must specify a fully qualitified existing file name"
+                else
+                    SUCC=1
+                    USER_NAME="--username=$TMP_USER"
+                    PASSWORD_FILE="--password_file=$TMP_PASS"
+                fi
+            done
+        fi
+    done
+}
+
+
 util_mkdir()
 {
     OWNER=$1
@@ -333,9 +360,9 @@ installation()
         SDIR_OWN=$DIR_OWN
         LOGDIR_OWN=$DIR_OWN
     fi
-    sed "s~%CERT_FILE%~$CERT_FILE~;s~%KEY_FILE%~$KEY_FILE~" "$LSINSTALL_DIR/lsws-prometheus-exporter.rc.in" > "$LSWS_HOME/lsws-prometheus-exporter.rc"
-    sed "s~%CERT_FILE%~$CERT_FILE~;s~%KEY_FILE%~$KEY_FILE~" "$LSINSTALL_DIR/lsws-prometheus-exporter.rc.gentoo.in" > "$LSWS_HOME/lsws-prometheus-exporter.rc.gentoo"
-    sed "s~%CERT_FILE%~$CERT_FILE~;s~%KEY_FILE%~$KEY_FILE~" "$LSINSTALL_DIR/lsws-prometheus-exporter.service.in" > "$LSWS_HOME/lsws-prometheus-exporter.service"
+    sed "s~%CERT_FILE%~$CERT_FILE~;s~%KEY_FILE%~$KEY_FILE~;s~%USER_NAME%~$USER_NAME~;s~%PASSWORD_FILE%~$PASSWORD_FILE~" "$LSINSTALL_DIR/lsws-prometheus-exporter.rc.in" > "$LSWS_HOME/lsws-prometheus-exporter.rc"
+    sed "s~%CERT_FILE%~$CERT_FILE~;s~%KEY_FILE%~$KEY_FILE~;s~%USER_NAME%~$USER_NAME~;s~%PASSWORD_FILE%~$PASSWORD_FILE~" "$LSINSTALL_DIR/lsws-prometheus-exporter.rc.gentoo.in" > "$LSWS_HOME/lsws-prometheus-exporter.rc.gentoo"
+    sed "s~%CERT_FILE%~$CERT_FILE~;s~%KEY_FILE%~$KEY_FILE~;s~%USER_NAME%~$USER_NAME~;s~%PASSWORD_FILE%~$PASSWORD_FILE~" "$LSINSTALL_DIR/lsws-prometheus-exporter.service.in" > "$LSWS_HOME/lsws-prometheus-exporter.service"
     cp $LSINSTALL_DIR/lsws-prometheus-exporter $LSWS_HOME/
     cp $LSINSTALL_DIR/install.sh  $LSWS_HOME/
     cp $LSINSTALL_DIR/functions.sh  $LSWS_HOME/

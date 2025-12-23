@@ -31,6 +31,12 @@ Cert file name [ENTER for no HTTPS]:
 
 Press [ENTER] by itself to use HTTP only for Prometheus connections to the exporter.  If you want to require HTTPS connections from Prometheus, enter a cert file name which is stored in a permanent location to be used by the service in PEM file format.  You will then be asked for a matching Key file name.
 
+```
+User name for basic auth [ENTER for no basic auth]: 
+```
+
+Press [ENTER] by itself to not use [basic authehtication](https://prometheus.io/docs/guides/basic-auth/).  If you specify a username you will be prompted for a password file.  You will be required to have the hashed password in that password file.  It is strongly recommended that the password file be secured by ownership/permissions.
+
 The service is then installed and started.
 
 ## Configuring Prometheus
@@ -52,6 +58,14 @@ A similar configuration but with the requirement of HTTPS (assuming you provided
     static_configs:
       - targets: ["localhost:9936"]
     scrape_interval: 1m       
+```
+
+If you use basic authentication you will need to add after `job_name` your user name and password file (values in single quotes).  These values should be the same as entered during installation.  For example for a username named USER and a password file named /usr/local/lsws-prometheus-exporter/pwd.txt you would specify after job_name:
+
+```
+    basic_auth:
+        username: 'USER'
+        password_file: '/usr/local/lsws-prometheus-exporter/pwd.txt'
 ```
 
 ## Metrics Exported
@@ -222,9 +236,11 @@ ExecStart=/usr/local/lsws-prometheus-exporter/lsws-prometheus-exporter --tls-cer
 | `--metrics-excluded-list` | A comma separated list of metrics to exclude, using the Prometheus name without the prefix `litespeed_`. | None |
 | `--metrics-service-addr` | The address and port to use to listen for prometheus collection requests within the pod.  Form: addr:port; a blank addr listens on all addresses. | `:9936` |
 | `--metrics-service-path` | The HTTP path to service requests on. | `/metrics` |
+| `--password_file` | If you want to use basic auth, you must specify a `username` and a fully qualified file name for the `password_file` | None |
 | `--rtreport` | The fuily qualfiied directory for the LiteSpeed real time report file.  | /tmp/lshttpd/.rtreport |
 | `--tls-cert-file` | If you want to require https to access metrics you must specify a `tls-cert-file` and a `tls-key-file` which are PEM encoded files | None |
 | `--tls-key-file` | If you want to require https to access metrics you must specify a `tls-cert-file` and a `tls-key-file` which are PEM encoded files | None |
+| `--username` | If you want to use basic auth, you must specify a `username` and a password_file. | None |
 | `--v` | Sets info loggings.  `--v=4` is the most verbose. | `2` |
 
 ## Troubleshooting
@@ -236,6 +252,9 @@ The exporter writes its errors and important messages to standard output.  If yo
 The exporter is built using the included Makefile.  If there's a change, update the script with the new version number.  If you wish to build the full package, make sure that `STAGING` is set to `0`; with staging set to `1` only the binary will be built.
 
 ## Notable changes
+
+### 0.1.4
+- [Feature] Added support for basic authentication.
 
 ### 0.1.3
 - [Feature] Make the location of the LiteSpeed real-time report file command line configurable

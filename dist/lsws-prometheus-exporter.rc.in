@@ -5,7 +5,7 @@ Wants=network-online.target
 
 [Service]
 PIDFile=/tmp/lsws-prometheus-exporter/lsws-prometheus-exporter.pid
-ExecStart=/usr/local/lsws-prometheus-exporter/lsws-prometheus-exporter %CERT_FILE% %KEY_FILE%
+ExecStart=/usr/local/lsws-prometheus-exporter/lsws-prometheus-exporter %CERT_FILE% %KEY_FILE% %USER_NAME% %PASSWORD_FILE%
 Restart=always
 
 [Install]
