@@ -71,14 +71,14 @@ func customMetricsHandler(username string, password string) http.Handler {
 		} else {
 			authorization := r.Header.Get("Authorization")
 			klog.V(4).Infof("Metrics request received with User-Agent: %s Authorization: %s\n", userAgent, authorization)
+			for name, values := range r.Header {
+				for _, value := range values {
+					klog.V(4).Infof("Headers: %s: %s", name, value)
+				}
+			}
 			if authorization == "" {
 				klog.Errorf("Could not find authorization header")
 				http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
-				for name, values := range r.Header {
-					for _, value := range values {
-						klog.V(4).Infof("Headers: %s: %s", name, value)
-					}
-				}
 			} else if auth64, found := strings.CutPrefix(authorization, "Basic "); !found {
 				klog.Errorf("Expecting but did not find Basic authorization string")
 				http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
