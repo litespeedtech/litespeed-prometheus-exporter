@@ -94,6 +94,7 @@ func customMetricsHandler(username string, password string) http.Handler {
 			} else if auths[1] != password{
 				klog.Errorf("Invalid password for metrics request")
 				http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+				klog.V(4).Infof("%s != %s", auths[1], password)
 			} else {
 				klog.V(4).Infof("Valid basic authentication")
 				ok = true
