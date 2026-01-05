@@ -71,11 +71,6 @@ func customMetricsHandler(username string, password string) http.Handler {
 		} else {
 			authorization := r.Header.Get("Authorization")
 			klog.V(4).Infof("Metrics request received with User-Agent: %s Authorization: %s\n", userAgent, authorization)
-			for name, values := range r.Header {
-				for _, value := range values {
-					klog.V(4).Infof("Headers: %s: %s", name, value)
-				}
-			}
 			if authorization == "" {
 				klog.Errorf("Could not find authorization header")
 				http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
@@ -91,7 +86,7 @@ func customMetricsHandler(username string, password string) http.Handler {
 			} else if auths[0] != username {
 				klog.Errorf("Invalid user for metrics request")
 				http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
-			} else if auths[1] != password{
+			} else if auths[1] != password {
 				klog.Errorf("Invalid password for metrics request")
 				http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
 				klog.V(4).Infof("%s != %s", auths[1], password)
