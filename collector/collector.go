@@ -445,12 +445,12 @@ func (c *LitespeedCollector) scrapeFile(fileName string) (report *litespeedRepor
 			}
 		case reqRateField:
 			parts := strings.SplitN(line, ": ", 2)
-			matches := ibRegex.FindStringSubmatch(line)
+			//matches := ibRegex.FindStringSubmatch(line)
 
 			m := parseKeyValLineToMap(parts[1])
 			rr := requestRateReport{
-				VHost: matches[1],
-				//VHost:     captureOutermostBrackets(line),
+				//VHost: matches[1],
+				VHost:     captureOutermostBrackets(line),
 				KeyValues: make(map[string]float64),
 			}
 			klog.V(4).Infof("reqRate report, vhost: %v kvs: %v", rr.VHost, m)
