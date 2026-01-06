@@ -356,6 +356,34 @@ func (c *LitespeedCollector) collectExtAppMetrics(core string, reports []externa
 	}
 }
 
+func captureOutermostBrackets(s string) string {
+	var result string
+	balance := 0
+	start := -1
+
+	for i, r := range s {
+		switch r {
+		case '[':
+			if balance == 0 {
+				start = i + 1 // Start capturing after the opening bracket
+			}
+			balance++
+		case ']':
+			balance--
+			if balance == 0 && start != -1 {
+				// End capturing before the closing bracket
+				result = s[start:i]
+				start = -1 // Reset start for the next potential outermost bracket set
+			} else if balance < 0 {
+				// Handle malformed strings if necessary (e.g., extra closing bracket)
+				balance = 0
+				start = -1
+			}
+		}
+	}
+	return result
+}
+
 func (c *LitespeedCollector) scrapeFile(fileName string) (report *litespeedReport, err error) {
 	file, err := os.Open(fileName)
 	if err != nil {
@@ -417,14 +445,15 @@ func (c *LitespeedCollector) scrapeFile(fileName string) (report *litespeedRepor
 			}
 		case reqRateField:
 			parts := strings.SplitN(line, ": ", 2)
-			matches := ibRegex.FindStringSubmatch(line)
+			//matches := ibRegex.FindStringSubmatch(line)
 
 			m := parseKeyValLineToMap(parts[1])
 			rr := requestRateReport{
-				VHost:     matches[1],
+				//VHost:     matches[1],
+				VHost:     captureOutermostBrackets(line),
 				KeyValues: make(map[string]float64),
 			}
-			//klog.V(4).Infof("reqRate report, hostname: %v", matches[1])
+			klog.V(4).Infof("reqRate report, vhost: %v", rr.VHost)
 			for k, v := range m {
 				if val, ok := LitespeedMetrics.reqRateMetrics[k]; !ok || !c.metricIsTracked(val.Name) {
 					klog.V(4).Infof("reqRate report skip not found or requested key: %v", k)
