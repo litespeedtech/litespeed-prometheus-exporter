@@ -371,7 +371,7 @@ func (c *LitespeedCollector) scrapeFile(fileName string) (report *litespeedRepor
 	}()
 
 	idRegex := regexp.MustCompile(`^\w*`)
-	ibRegex := regexp.MustCompile(`\[([^\[\]]*)\]`)
+	ibRegex := regexp.MustCompile(`\[(?:\[??[^\[]*?)\]`)
 
 	report = &litespeedReport{
 		GeneralInfo: generalInfoReport{KeyValues: make(map[string]float64)},
