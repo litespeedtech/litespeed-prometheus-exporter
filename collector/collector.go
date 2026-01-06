@@ -453,7 +453,7 @@ func (c *LitespeedCollector) scrapeFile(fileName string) (report *litespeedRepor
 				VHost:     captureOutermostBrackets(line),
 				KeyValues: make(map[string]float64),
 			}
-			klog.V(4).Infof("reqRate report, vhost: %v", rr.VHost)
+			klog.V(4).Infof("reqRate report, vhost: %v kvs: %v", rr.VHost, m)
 			for k, v := range m {
 				if val, ok := LitespeedMetrics.reqRateMetrics[k]; !ok || !c.metricIsTracked(val.Name) {
 					klog.V(4).Infof("reqRate report skip not found or requested key: %v", k)
