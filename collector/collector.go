@@ -45,7 +45,7 @@ type LitespeedCollectorOpts struct {
 	ExcludedMetrics map[string]bool // external name is the key
 	CgroupTry       int
 	LitespeedHome   string
-	RtReport		string
+	RtReport        string
 	FilePattern     string
 }
 
@@ -66,8 +66,8 @@ func customMetricsHandler(username string, password string) http.Handler {
 		// You can read request headers here
 		userAgent := r.Header.Get("User-Agent")
 		ok := false
-		if username == ""{
-			ok = true			
+		if username == "" {
+			ok = true
 		} else {
 			authorization := r.Header.Get("Authorization")
 			klog.V(4).Infof("Metrics request received with User-Agent: %s Authorization: %s\n", userAgent, authorization)
@@ -117,7 +117,7 @@ func Run(ctx context.Context, addr, metricsPath, metricsExcludedList, tlsCertFil
 			ExcludedMetrics: ParseFlagsToMap(excludedMetricFlags),
 			CgroupTry:       cgroupTry,
 			LitespeedHome:   litespeedHome,
-			RtReport:		 rtReport,
+			RtReport:        rtReport,
 			FilePattern:     rtReport + "*",
 		},
 	)
@@ -317,7 +317,11 @@ func (c *LitespeedCollector) collectGeneralInfoMetrics(core string, generalInfo 
 	for flag, value := range generalInfo.KeyValues {
 		if metric, ok := LitespeedMetrics.generalInfoMetrics[flag]; ok {
 			klog.V(4).Infof("generalInfoMetric: %v", metric)
-			ch <- prometheus.MustNewConstMetric(metric.Desc, metric.Type, value, core)
+			if metricOut, err := prometheus.NewConstMetric(metric.Desc, metric.Type, value, core); err != nil {
+				klog.Errorf("Error in collecting generalInfoMetrics: %v: %v", metric, err)
+			} else {
+				ch <- metricOut
+			}
 		}
 	}
 }
@@ -327,7 +331,11 @@ func (c *LitespeedCollector) collectReqRateMetrics(core string, reports []reques
 		for flag, value := range rrReport.KeyValues {
 			if metric, ok := LitespeedMetrics.reqRateMetrics[flag]; ok {
 				klog.V(4).Infof("reqRateMetric: %v, value: %v, core: %v", metric, value, core)
-				ch <- prometheus.MustNewConstMetric(metric.Desc, metric.Type, value, core, rrReport.VHost)
+				if metricOut, err := prometheus.NewConstMetric(metric.Desc, metric.Type, value, core, rrReport.VHost); err != nil {
+					klog.Errorf("Error in collecting reqRateMetric: %v: %v", metric, err)
+				} else {
+					ch <- metricOut
+				}
 			}
 		}
 	}
@@ -338,7 +346,11 @@ func (c *LitespeedCollector) collectExtAppMetrics(core string, reports []externa
 		for flag, value := range eaReport.KeyValues {
 			if metric, ok := LitespeedMetrics.extAppMetrics[flag]; ok {
 				klog.V(4).Infof("extAppMetric: %v, value: %v, core: %v", metric, value, core)
-				ch <- prometheus.MustNewConstMetric(metric.Desc, metric.Type, value, core, eaReport.AppType, eaReport.VHost, eaReport.Handler)
+				if metricOut, err := prometheus.NewConstMetric(metric.Desc, metric.Type, value, core, eaReport.AppType, eaReport.VHost, eaReport.Handler); err != nil {
+					klog.Errorf("Error in collecting ExtAppMetric: %v: %v", metric, err)
+				} else {
+					ch <- metricOut
+				}
 			}
 		}
 	}

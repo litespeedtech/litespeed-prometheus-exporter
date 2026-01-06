@@ -35,7 +35,7 @@ Press [ENTER] by itself to use HTTP only for Prometheus connections to the expor
 User name for basic auth [ENTER for no basic auth]: 
 ```
 
-Press [ENTER] by itself to not use [basic authehtication](https://prometheus.io/docs/guides/basic-auth/).  If you specify a username you will be prompted for a password file.  You will be required to have the hashed password in that password file.  It is strongly recommended that the password file be secured by ownership/permissions.
+Press [ENTER] by itself to not use [basic authetication](https://prometheus.io/docs/guides/basic-auth/).  If you specify a username you will be prompted for a password file.  You will be required to have the plain text password in that password file.  It is strongly recommended that the password file be secured by ownership/permissions.  Since the LiteSpeed Prometheus Exporter runs as a service as root that can generally be any user.  Since we recommend that the same password file be used by Prometheus it will need to be the user that Prometheus runs as.
 
 The service is then installed and started.
 
