@@ -255,6 +255,7 @@ The exporter is built using the included Makefile.  If there's a change, update 
 
 ### 0.1.4
 - [Feature] Added support for basic authentication.
+- [Bug Fix] Support nested brackets in the VHost name in the REQ_RATE scrape.
 
 ### 0.1.3
 - [Feature] Make the location of the LiteSpeed real-time report file command line configurable
