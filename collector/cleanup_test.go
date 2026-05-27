@@ -45,11 +45,13 @@ func TestCleanupBadFiles_DeletesStaleSiblings(t *testing.T) {
 	}
 }
 
-// TestCleanupBadFiles_RefusesSymlinkBase guards H7/M7: a symlinked
-// rtreport must abort cleanup rather than chase the link.
-func TestCleanupBadFiles_RefusesSymlinkBase(t *testing.T) {
+// TestCleanupBadFiles_FollowsSymlinkBase verifies the v0.2.1 behaviour:
+// LiteSpeed publishes .rtreport as a symlink, so the cleanup pass must
+// follow it (compare mtimes against the symlink target) rather than
+// abort. Stale siblings should still be deleted.
+func TestCleanupBadFiles_FollowsSymlinkBase(t *testing.T) {
 	dir := t.TempDir()
-	target := filepath.Join(dir, "real_rt")
+	target := filepath.Join(dir, ".rtreport_real")
 	link := filepath.Join(dir, ".rtreport")
 	mustWrite(t, target, "real")
 	if err := os.Symlink(target, link); err != nil {
@@ -57,13 +59,46 @@ func TestCleanupBadFiles_RefusesSymlinkBase(t *testing.T) {
 	}
 	stale := filepath.Join(dir, ".rtreport_stale")
 	mustWrite(t, stale, "stale")
+
 	now := time.Now()
-	_ = os.Chtimes(stale, now.Add(-time.Hour), now.Add(-time.Hour))
+	if err := os.Chtimes(target, now, now); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(stale, now.Add(-time.Hour), now.Add(-time.Hour)); err != nil {
+		t.Fatal(err)
+	}
 
 	cleanupBadFiles(link, link+"*")
 
-	if _, err := os.Stat(stale); err != nil {
-		t.Fatalf("stale file should have been preserved when base is a symlink, got err=%v", err)
+	// The stale sibling should be gone (its mtime didn't match the
+	// symlink target's).
+	if _, err := os.Stat(stale); !os.IsNotExist(err) {
+		t.Fatalf("expected stale file to be removed when base is a symlink, got err=%v", err)
+	}
+	// The symlink itself and its target must survive — we never unlink
+	// through symlinks, and the target's mtime matches itself.
+	if _, err := os.Lstat(link); err != nil {
+		t.Fatalf("symlink should still exist: %v", err)
+	}
+	if _, err := os.Stat(target); err != nil {
+		t.Fatalf("symlink target should still exist: %v", err)
+	}
+}
+
+// TestCleanupBadFiles_MissingBaseIsSilent verifies that a missing
+// .rtreport (e.g. LSWS hasn't started yet) is handled silently and does
+// not touch any sibling files.
+func TestCleanupBadFiles_MissingBaseIsSilent(t *testing.T) {
+	dir := t.TempDir()
+	base := filepath.Join(dir, ".rtreport")
+	sibling := filepath.Join(dir, ".rtreport_stale")
+	mustWrite(t, sibling, "sibling")
+
+	// Should not panic, should not delete anything.
+	cleanupBadFiles(base, base+"*")
+
+	if _, err := os.Stat(sibling); err != nil {
+		t.Fatalf("sibling must survive when base is missing: %v", err)
 	}
 }
 

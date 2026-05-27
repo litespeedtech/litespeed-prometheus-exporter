@@ -23,8 +23,23 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.25'
+          # Use the .x suffix so setup-go fetches the latest published 1.25
+          # patch release. Without it, runners can resolve a stale cached
+          # toolchain (we shipped v0.2.0 built with go1.22.2 because of this).
+          go-version: '1.25.x'
           check-latest: true
+
+      - name: Sanity-check Go toolchain
+        # Fail loudly if the resolved Go is older than what go.mod requires.
+        # This guards against setup-go silently picking up a cached older
+        # version, which is what happened in v0.2.0.
+        run: |
+          GOVER=$(go version | awk '{print $3}')
+          echo "Resolved toolchain: $GOVER"
+          case "$GOVER" in
+            go1.25.*|go1.26.*|go1.27.*) echo "OK" ;;
+            *) echo "ERROR: built with $GOVER but go.mod requires >= go1.25" >&2; exit 1 ;;
+          esac
 
       - name: Derive version from tag
         id: ver

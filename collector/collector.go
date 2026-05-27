@@ -231,21 +231,25 @@ func NewLitespeedCollector(opts LitespeedCollectorOpts) *LitespeedCollector {
 // mtime differs from the base file. The glob is restricted to files that live
 // in the same directory as rtReport so an attacker who controls the pattern
 // (or a misconfigured --rtreport flag) cannot cause arbitrary file deletion
-// outside that directory. Symlinks are skipped via Lstat to defeat
-// symlink-based redirection attacks.
+// outside that directory. Each candidate file is checked with Lstat and
+// skipped if it is not a regular file, so we never unlink through a
+// symlink. The base rtReport itself is followed via Stat because LiteSpeed
+// usually publishes .rtreport as a symlink pointing at a versioned target.
 func cleanupBadFiles(rtReport, pattern string) {
 	matches, err := filepath.Glob(pattern)
 	if err != nil {
 		klog.Errorf("Unable to get matching files for: %v: %v", pattern, err)
 		return
 	}
-	baseStat, err := os.Lstat(rtReport)
+	// Stat (follow) the base so we compare mtimes against the real
+	// target. Lstat would give us the symlink's own mtime, which is
+	// neither what LiteSpeed updates nor what we care about.
+	baseStat, err := os.Stat(rtReport)
 	if err != nil {
-		klog.Errorf("Unable to get stat for base file: %v: %v", rtReport, err)
-		return
-	}
-	if baseStat.Mode()&os.ModeSymlink != 0 {
-		klog.Errorf("Refusing to operate; base rtreport is a symlink: %v", rtReport)
+		// Not fatal — LiteSpeed may not have written its first report
+		// yet. Demoted from Errorf so it doesn't masquerade as a
+		// failure in the log.
+		klog.V(2).Infof("Skipping rtreport cleanup; base file not present: %v: %v", rtReport, err)
 		return
 	}
 	rtDir := filepath.Dir(rtReport)

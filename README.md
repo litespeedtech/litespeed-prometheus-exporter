@@ -440,6 +440,39 @@ go test -race ./...     # race detector
 
 ## Notable changes
 
+### 0.2.1
+
+- [Bug Fix] **Empty `/metrics` on systemd hosts.** The bundled unit
+  shipped with `PrivateTmp=true`, which gave the exporter its own /tmp
+  namespace and hid LSWS's `/tmp/lshttpd/.rtreport`. Add
+  `BindReadOnlyPaths=/tmp/lshttpd` so the report directory is visible
+  inside the namespace while every other hardening directive stays in
+  effect.
+- [Bug Fix] **`Refusing to operate; base rtreport is a symlink`** at
+  startup on a normal LiteSpeed install. LSWS publishes `.rtreport` as
+  a symlink; the v0.2.0 cleanup pass refused to follow it. v0.2.1
+  follows the symlink (we still never *unlink* through a symlink — the
+  per-file `Lstat` / `IsRegular` guard is intact).
+- [Bug Fix] When `.rtreport` is genuinely missing (LSWS not yet
+  started), the startup log now says so at V(2) instead of `Errorf`,
+  so it doesn't masquerade as a failure in the journal.
+- [Build] Pin the release workflow to `go-version: '1.25.x'` (was `'1.25'`)
+  and add a sanity-check step that fails the build if the resolved
+  toolchain is older than go1.25. The v0.2.0 binary was inadvertently
+  built with go1.22.2; v0.2.1 is the first release whose
+  `go_info{version=...}` actually reflects Go 1.25.
+- [Build] Makefile now sets `GOTOOLCHAIN ?= go1.25.10` so `make all`
+  works on hosts whose system Go is older than 1.25 (e.g. Ubuntu 22.04
+  ships go1.22). Override with `GOTOOLCHAIN=go1.25.x make all`.
+- [Install] Top-level `install.sh` now uses an existence check (not exec
+  bit) for the bundled installer, explicitly `chmod +x`s the bundled
+  scripts after extraction, and reattaches `</dev/tty` so cert / key /
+  basic-auth prompts work correctly under `curl … | sudo sh`. Fixes
+  `bundled install.sh not found or not executable` reported under some
+  sudo configurations on Ubuntu 22.04.
+- [Docs] Fix `raw.githubusercontent.com/.../main/install.sh` to use
+  `master` (the actual default branch).
+
 ### 0.2.0
 
 > **Upgrading from 0.1.x?** The install procedure has changed. Read the

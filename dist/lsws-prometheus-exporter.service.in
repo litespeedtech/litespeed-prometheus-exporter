@@ -14,6 +14,11 @@ NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=true
 PrivateTmp=true
+# PrivateTmp=true gives the unit its own /tmp namespace, so without this
+# bind the exporter cannot see LSWS's /tmp/lshttpd/.rtreport file and
+# /metrics is empty. Bind it read-only so we get the hardening AND the
+# data. If --rtreport is moved out of /tmp this line can go away.
+BindReadOnlyPaths=/tmp/lshttpd
 PrivateDevices=true
 ProtectKernelTunables=true
 ProtectKernelModules=true
