@@ -1,0 +1,106 @@
+package collector
+
+import (
+	"os"
+	"path/filepath"
+	"testing"
+	"time"
+)
+
+// TestCleanupBadFiles_DeletesStaleSiblings verifies the basic happy-path:
+// siblings whose mtime differs from the base file get removed, and matching
+// the base file's mtime is preserved.
+func TestCleanupBadFiles_DeletesStaleSiblings(t *testing.T) {
+	dir := t.TempDir()
+	base := filepath.Join(dir, ".rtreport")
+	stale := filepath.Join(dir, ".rtreport_stale")
+	keep := filepath.Join(dir, ".rtreport_keep")
+
+	mustWrite(t, base, "base")
+	mustWrite(t, stale, "stale")
+	mustWrite(t, keep, "keep")
+
+	// Force differing mtimes.
+	now := time.Now()
+	if err := os.Chtimes(base, now, now); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(keep, now, now); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(stale, now.Add(-time.Hour), now.Add(-time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+
+	cleanupBadFiles(base, base+"*")
+
+	if _, err := os.Stat(stale); !os.IsNotExist(err) {
+		t.Fatalf("expected stale file to be removed, got err=%v", err)
+	}
+	if _, err := os.Stat(keep); err != nil {
+		t.Fatalf("expected keep file to survive: %v", err)
+	}
+	if _, err := os.Stat(base); err != nil {
+		t.Fatalf("expected base file to survive: %v", err)
+	}
+}
+
+// TestCleanupBadFiles_RefusesSymlinkBase guards H7/M7: a symlinked
+// rtreport must abort cleanup rather than chase the link.
+func TestCleanupBadFiles_RefusesSymlinkBase(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "real_rt")
+	link := filepath.Join(dir, ".rtreport")
+	mustWrite(t, target, "real")
+	if err := os.Symlink(target, link); err != nil {
+		t.Skipf("symlinks unsupported: %v", err)
+	}
+	stale := filepath.Join(dir, ".rtreport_stale")
+	mustWrite(t, stale, "stale")
+	now := time.Now()
+	_ = os.Chtimes(stale, now.Add(-time.Hour), now.Add(-time.Hour))
+
+	cleanupBadFiles(link, link+"*")
+
+	if _, err := os.Stat(stale); err != nil {
+		t.Fatalf("stale file should have been preserved when base is a symlink, got err=%v", err)
+	}
+}
+
+// TestCleanupBadFiles_SkipsSymlinkMatch ensures symlinks that match the glob
+// are not unlinked through. Without the Lstat / IsRegular guard, an attacker
+// could place a symlink in the rtreport dir pointing somewhere else.
+func TestCleanupBadFiles_SkipsSymlinkMatch(t *testing.T) {
+	dir := t.TempDir()
+	base := filepath.Join(dir, ".rtreport")
+	mustWrite(t, base, "base")
+	now := time.Now()
+	_ = os.Chtimes(base, now, now)
+
+	// Real file outside the glob, plus a symlink that matches the glob.
+	outside := filepath.Join(dir, "outside")
+	mustWrite(t, outside, "outside")
+	link := filepath.Join(dir, ".rtreport_link")
+	if err := os.Symlink(outside, link); err != nil {
+		t.Skipf("symlinks unsupported: %v", err)
+	}
+	// Make the symlink target's mtime differ from base so the old code would
+	// have unlinked it.
+	_ = os.Chtimes(outside, now.Add(-time.Hour), now.Add(-time.Hour))
+
+	cleanupBadFiles(base, base+"*")
+
+	if _, err := os.Lstat(link); err != nil {
+		t.Fatalf("symlink match should not have been removed: %v", err)
+	}
+	if _, err := os.Stat(outside); err != nil {
+		t.Fatalf("symlink target must remain untouched: %v", err)
+	}
+}
+
+func mustWrite(t *testing.T, path, content string) {
+	t.Helper()
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("WriteFile %s: %v", path, err)
+	}
+}

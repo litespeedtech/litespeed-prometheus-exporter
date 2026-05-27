@@ -11,4 +11,3 @@ start()
 	ebegin "Starting LiteSpeed Web Server Prometheus Exporter"
 	/usr/local/lsws-prometheus-exporter/lsws-prometheus-exporter %CERT_FILE% %KEY_FILE% %USER_NAME% %PASSWORD_FILE% &
 }
-

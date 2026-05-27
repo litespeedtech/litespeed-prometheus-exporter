@@ -1,0 +1,77 @@
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write    # needed to upload release assets
+  id-token: write    # needed for build provenance attestations
+  attestations: write
+
+jobs:
+  build:
+    name: Build & publish release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          check-latest: true
+
+      - name: Derive version from tag
+        id: ver
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Verify go.mod is tidy
+        run: |
+          go mod tidy
+          git diff --exit-code go.mod go.sum
+
+      - name: govulncheck
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./...
+
+      - name: Run tests
+        run: go test -race ./...
+
+      - name: Build release binary
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          mkdir -p dist
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+            go build -trimpath \
+              -ldflags "-w -s -X main.version=${VERSION} -X main.gitRepo=git-${GITHUB_SHA::7}" \
+              -o dist/lsws-prometheus-exporter .
+          chmod +x dist/lsws-prometheus-exporter
+
+      - name: Build tarball + sha256 sidecar
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: VERSION="${VERSION}" ./mkdist.sh "${VERSION}"
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-path: |
+            lsws-prometheus-exporter.${{ steps.ver.outputs.version }}.tgz
+            dist/lsws-prometheus-exporter
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: v${{ steps.ver.outputs.version }}
+          generate_release_notes: true
+          files: |
+            lsws-prometheus-exporter.${{ steps.ver.outputs.version }}.tgz
+            lsws-prometheus-exporter.${{ steps.ver.outputs.version }}.tgz.sha256
+            dist/lsws-prometheus-exporter

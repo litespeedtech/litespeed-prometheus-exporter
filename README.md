@@ -6,38 +6,185 @@ Besides giving useful information about LiteSpeed itself, it is an integral part
 
 ## Installation
 
-These installation instructions assume you're downloading the compressed binary and installing from there, which will work for most x64 environments.  You can also build the package from the included Makefile if you need it on another architecture.
+The exporter is distributed as a pre-built Linux/amd64 binary attached to each
+[GitHub Release](https://github.com/litespeedtech/litespeed-prometheus-exporter/releases).
+You must install it on the LiteSpeed machine you want to monitor; Prometheus
+itself can run elsewhere.
 
-You must install the exporter on the LiteSpeed machine where the information is to be exported from.  Prometheus can run on another machine, but this software must be installed on the LiteSpeed machine to be monitored.
+There are three supported install paths, in order of convenience:
 
-From a command prompt, after downloading the software, use the tar command to extract the binary (substitute `VERSION` with the actual version of the software):
+### Option 1 — One-line installer (recommended)
+
+The `install.sh` at the root of this repository resolves the latest release,
+downloads the tarball from GitHub, **verifies its SHA-256 checksum** against
+the `.sha256` sidecar published alongside it, extracts it, and runs the
+bundled service installer:
 
 ```
-tar xf lsws-prometheus-exporter.VERSION.tgz
+curl -fsSL https://raw.githubusercontent.com/litespeedtech/litespeed-prometheus-exporter/main/install.sh | sudo sh
 ```
 
-That will create a `lsws-prometheus-exporter` directory.  Make that your default directory and run the install script as root:
+To pin a specific version, set `VERSION`:
 
 ```
+curl -fsSL https://raw.githubusercontent.com/litespeedtech/litespeed-prometheus-exporter/main/install.sh \
+  | sudo VERSION=0.2.0 sh
+```
+
+Required tools on the host: `curl`, `tar`, and either `sha256sum` (coreutils)
+or `shasum` (BSD / macOS).
+
+### Option 2 — Manual download
+
+If you'd rather not pipe a remote script to a shell, download and verify the
+release tarball yourself. Replace `VERSION` with the version you want
+(e.g. `0.2.0`):
+
+```
+VERSION=0.2.0
+URL=https://github.com/litespeedtech/litespeed-prometheus-exporter/releases/download/v${VERSION}
+
+curl -fLO ${URL}/lsws-prometheus-exporter.${VERSION}.tgz
+curl -fLO ${URL}/lsws-prometheus-exporter.${VERSION}.tgz.sha256
+
+sha256sum -c lsws-prometheus-exporter.${VERSION}.tgz.sha256
+
+tar xf lsws-prometheus-exporter.${VERSION}.tgz
 cd lsws-prometheus-exporter
 sudo ./install.sh
 ```
 
-You are then prompted:
+Each release is also published with [build-provenance attestations](https://docs.github.com/en/actions/security-guides/using-artifact-attestations-to-establish-provenance-for-builds),
+which you can verify with the GitHub CLI:
 
 ```
-Cert file name [ENTER for no HTTPS]: 
+gh attestation verify lsws-prometheus-exporter.${VERSION}.tgz \
+  --repo litespeedtech/litespeed-prometheus-exporter
 ```
 
-Press [ENTER] by itself to use HTTP only for Prometheus connections to the exporter.  If you want to require HTTPS connections from Prometheus, enter a cert file name which is stored in a permanent location to be used by the service in PEM file format.  You will then be asked for a matching Key file name.
+### Option 3 — Build from source
+
+Requires Go 1.25 or newer. From a clone of this repository:
 
 ```
-User name for basic auth [ENTER for no basic auth]: 
+make controller
+sudo ./dist/install.sh
 ```
 
-Press [ENTER] by itself to not use [basic authetication](https://prometheus.io/docs/guides/basic-auth/).  If you specify a username you will be prompted for a password file.  You will be required to have the plain text password in that password file.  It is strongly recommended that the password file be secured by ownership/permissions.  Since the LiteSpeed Prometheus Exporter runs as a service as root that can generally be any user.  Since we recommend that the same password file be used by Prometheus it will need to be the user that Prometheus runs as.
+`make controller` produces `litespeed-prometheus-exporter` at the repository
+root and copies it to `dist/lsws-prometheus-exporter`. `make all` additionally
+runs `mkdist.sh` to produce a `.tgz` you could distribute internally.
 
-The service is then installed and started.
+### Installer prompts
+
+Whichever path you take, `install.sh` will then prompt:
+
+```
+Cert file name [ENTER for no HTTPS]:
+```
+
+Press **[ENTER]** to use plain HTTP (recommended only when the `:9936`
+listener is firewalled to the Prometheus host — see *Security
+considerations* below). To require HTTPS, supply a PEM-encoded certificate
+path; you will then be prompted for a matching key path. The service is
+installed and started automatically.
+
+To remove the exporter later, run `sudo /usr/local/lsws-prometheus-exporter/uninstall.sh`.
+
+## Security considerations
+
+The exporter is a small Prometheus collector that reads LiteSpeed status
+files from the local filesystem and exposes them over HTTP. It is not a
+hardened, authenticated public API. Operators are responsible for
+restricting network access. See [`SECURITY.md`](SECURITY.md) for vulnerability
+reporting.
+
+### Threat model
+
+- **In scope:** robust parsing of LiteSpeed report files; safe handling of
+  the local filesystem (PID files, report cleanup, TLS cert/key loading);
+  HTTP server hardening against malformed requests, slowloris-style
+  resource exhaustion, and reflected-input bugs; HTTP Basic auth with
+  constant-time credential comparison.
+- **Out of scope:** stronger auth schemes than Basic (use a reverse proxy
+  for OAuth/mTLS), end-to-end transport secrecy on the loopback interface,
+  and protection of the underlying LiteSpeed daemon.
+- **Trust assumptions:** the LiteSpeed `.rtreport*` files, the LiteSpeed
+  PID file, and the cgroup files under `/sys/fs/cgroup` are produced by
+  the local LiteSpeed daemon (or the kernel) and are trusted inputs. The
+  service runs as `root` by default to read these files. The
+  `--password-file` is read once at startup and held in memory.
+
+### Information disclosure
+
+The `/metrics` endpoint exposes the LiteSpeed version string, the names of
+configured virtual hosts, per-application pool internals, request rates,
+and (when LiteSpeed Containers is enabled) per-UID resource consumption.
+This is reconnaissance-grade data and **must not** be exposed to untrusted
+networks.
+
+### Recommended hardening checklist
+
+1. **Bind locally or firewall the port.** The default listen address is
+   `:9936` (all interfaces). If your Prometheus server runs on the same
+   host, pass `--metrics-service-addr=127.0.0.1:9936`. Otherwise, restrict
+   access with `iptables`/`nftables`/cloud security groups so only the
+   Prometheus scraper can reach the port.
+2. **Prefer HTTPS** when crossing untrusted networks (`--tls-cert-file`
+   / `--tls-key-file`). The cert and key must be regular PEM files; the
+   exporter validates this at startup.
+3. **Enable built-in HTTP Basic authentication** with `--username` and
+   `--password-file`, or add a reverse proxy enforcing OAuth/mTLS before
+   exposing the exporter to a network you do not fully control. Built-in
+   auth uses constant-time credential comparison and emits a
+   `WWW-Authenticate: Basic realm="lsws-prometheus-exporter"` header on
+   401 so Prometheus and other clients can negotiate. **The password file
+   must be plain text, mode `0600`, and owned by the exporter's user.**
+   Note that Basic auth without TLS sends credentials in clear text on
+   the wire — pair it with `--tls-cert-file` / `--tls-key-file`.
+4. **Run as a system user, not root.** While LiteSpeed often expects to be
+   monitored by root, on hosts where the report files are readable by a
+   dedicated user you can drop privileges via `User=` in the systemd unit.
+5. **Lock down the systemd unit.** Add the following directives to
+   `/etc/systemd/system/lsws-prometheus-exporter.service` under
+   `[Service]`:
+
+   ```ini
+   NoNewPrivileges=true
+   ProtectSystem=strict
+   ProtectHome=true
+   PrivateTmp=true
+   PrivateDevices=true
+   ProtectKernelTunables=true
+   ProtectKernelModules=true
+   ProtectControlGroups=true
+   RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+   RestrictNamespaces=true
+   LockPersonality=true
+   MemoryDenyWriteExecute=true
+   SystemCallArchitectures=native
+   RuntimeDirectory=lsws-prometheus-exporter
+   ```
+
+   These are layered defenses; they don't replace network restrictions
+   but greatly reduce blast radius if the process is compromised. After
+   editing, run `systemctl daemon-reload && systemctl restart lsws-prometheus-exporter`.
+6. **Verify release artifacts.** Always check the `.sha256` sidecar:
+
+   ```
+   sha256sum -c lsws-prometheus-exporter.${VERSION}.tgz.sha256
+   ```
+
+   For releases built by GitHub Actions, you can additionally verify the
+   build provenance attestation:
+
+   ```
+   gh attestation verify lsws-prometheus-exporter.${VERSION}.tgz \
+     --repo litespeedtech/litespeed-prometheus-exporter
+   ```
+7. **Subscribe to release notifications.** "Watch → Releases only" on
+   GitHub so you get notified when new versions ship — many of those
+   ship security fixes in dependencies.
 
 ## Configuring Prometheus
 
@@ -57,7 +204,21 @@ A similar configuration but with the requirement of HTTPS (assuming you provided
     scheme: https
     static_configs:
       - targets: ["localhost:9936"]
-    scrape_interval: 1m       
+    scrape_interval: 1m
+```
+
+If you also enabled HTTP Basic auth, add `basic_auth` to the scrape config
+with the same username and password file you supplied to the exporter:
+
+```yaml
+  - job_name: "litespeed_prometheus_exporter"
+    scheme: https
+    basic_auth:
+        username: 'USER'
+        password_file: '/usr/local/lsws-prometheus-exporter/pwd.txt'
+    static_configs:
+      - targets: ["localhost:9936"]
+    scrape_interval: 1m
 ```
 
 If you use basic authentication you will need to add after `job_name` your user name and password file (values in single quotes).  These values should be the same as entered during installation.  For example for a username named USER and a password file named /usr/local/lsws-prometheus-exporter/pwd.txt you would specify after job_name:
@@ -233,14 +394,16 @@ ExecStart=/usr/local/lsws-prometheus-exporter/lsws-prometheus-exporter --tls-cer
 | - | - | - |
 | `--cgroups` | Whether cgroups v2 user information will be collected.  0 requests disabling, 1 requests enabling if cgroups v2 and LiteSpeed Containers are enabled. | 1 |
 | `--litespeed-home` | Home directory for LiteSpeed, if cgroups are enabled. | /usr/local/lsws |
+| `--litespeed-pid-file` | LiteSpeed daemon PID file used for the `litespeed_up` probe. | /tmp/lshttpd/lshttpd.pid |
 | `--metrics-excluded-list` | A comma separated list of metrics to exclude, using the Prometheus name without the prefix `litespeed_`. | None |
-| `--metrics-service-addr` | The address and port to use to listen for prometheus collection requests within the pod.  Form: addr:port; a blank addr listens on all addresses. | `:9936` |
+| `--metrics-service-addr` | The address and port to use to listen for prometheus collection requests.  Form: addr:port; a blank addr listens on all addresses. Set to `127.0.0.1:9936` if Prometheus runs on the same host. | `:9936` |
 | `--metrics-service-path` | The HTTP path to service requests on. | `/metrics` |
-| `--password_file` | If you want to use basic auth, you must specify a `username` and a fully qualified file name for the `password_file` | None |
-| `--rtreport` | The fuily qualfiied directory for the LiteSpeed real time report file.  | /tmp/lshttpd/.rtreport |
+| `--password-file` | Plain-text password file used with `--username` for HTTP Basic auth on `/metrics`. The file must be `chmod 0600` and owned by the exporter's user. | None |
+| `--pid-directory` | Directory for the exporter's own PID file. Empty means `/run/lsws-prometheus-exporter` when writable, otherwise `/tmp/lsws-prometheus-exporter`. | (auto) |
+| `--rtreport` | The fully qualified path to the LiteSpeed real time report file.  | /tmp/lshttpd/.rtreport |
 | `--tls-cert-file` | If you want to require https to access metrics you must specify a `tls-cert-file` and a `tls-key-file` which are PEM encoded files | None |
 | `--tls-key-file` | If you want to require https to access metrics you must specify a `tls-cert-file` and a `tls-key-file` which are PEM encoded files | None |
-| `--username` | If you want to use basic auth, you must specify a `username` and a password_file. | None |
+| `--username` | Username required for HTTP Basic auth on `/metrics`. Must be paired with `--password-file`. | None |
 | `--v` | Sets info loggings.  `--v=4` is the most verbose. | `2` |
 
 ## Troubleshooting
@@ -249,13 +412,130 @@ The exporter writes its errors and important messages to standard output.  If yo
 
 ## Building the Exporter
 
-The exporter is built using the included Makefile.  If there's a change, update the script with the new version number.  If you wish to build the full package, make sure that `STAGING` is set to `0`; with staging set to `1` only the binary will be built.
+The exporter requires **Go 1.25 or newer** to build. With Go's `GOTOOLCHAIN=auto`
+default, any Go ≥ 1.21 toolchain will auto-download a matching 1.25.x
+release on demand. If `GOTOOLCHAIN=local`, install Go 1.25 yourself.
+The produced binary is statically linked (`CGO_ENABLED=0`) and runs on any
+modern Linux kernel — including Ubuntu 20.04+, AlmaLinux 8/9, RHEL 8/9, and
+Debian 11+.
+
+Build steps:
+
+```
+make controller        # produces litespeed-prometheus-exporter at repo root
+make all               # also produces lsws-prometheus-exporter.${VERSION}.tgz
+```
+
+The version number is set in the `Makefile`. `make all` runs `mkdist.sh`
+which builds the tarball but **does not** auto-commit binaries or
+manipulate git tags — releases are produced by the `release.yml` GitHub
+Actions workflow on tag push.
+
+### Running tests
+
+```
+go test ./...           # unit tests
+go test -race ./...     # race detector
+```
 
 ## Notable changes
 
+### 0.2.0
+
+> **Upgrading from 0.1.x?** The install procedure has changed. Read the
+> [Installation](#installation) section above before running the new
+> `install.sh` — in particular note the new one-line installer
+> (`curl … | sudo sh`), the SHA-256 sidecar verification step, and the
+> `gh attestation verify` build-provenance check.
+>
+> The bundled `dist/install.sh` now also prompts for an optional
+> **basic-auth username and password file** in addition to the existing
+> cert/key prompts. If you accept the default (ENTER), behaviour is
+> identical to 0.1.3.
+>
+> The systemd unit produced by the installer now writes its PID file to
+> `/run/lsws-prometheus-exporter/` (via `RuntimeDirectory=`) instead of
+> `/tmp`. Existing 0.1.x installs are migrated automatically on the next
+> `service start`. If you have custom scripts that read the old
+> `/tmp/lsws-prometheus-exporter/lsws-prometheus-exporter.pid`, update
+> them to read `/run/lsws-prometheus-exporter/lsws-prometheus-exporter.pid`.
+>
+> If you have an existing v0.1.4 systemd unit referring to
+> `--password_file=…`, it will keep working — that spelling is accepted
+> as an alias for the canonical `--password-file`.
+
+- [Install] **New top-level `install.sh`** — a one-line
+  `curl … | sudo sh` installer that resolves the latest release,
+  downloads the tarball from GitHub Releases, verifies its SHA-256, and
+  runs the bundled installer. See *Option 1 — One-line installer* in
+  the [Installation](#installation) section. The previous "git clone +
+  make" path still works (now documented as Option 3 — Build from
+  source).
+- [Install] **Manual download path** now includes a SHA-256 sidecar
+  (`*.tgz.sha256`) and an optional `gh attestation verify` step. The
+  release workflow generates SLSA build-provenance attestations that
+  let consumers verify which CI run produced their binary.
+- [Install] **`dist/install.sh` prompts for basic auth** in addition to
+  cert/key. Accept the default (ENTER) for identical 0.1.x behaviour.
+- [Feature] HTTP Basic authentication on `/metrics` via `--username` /
+  `--password-file`. Credential check uses `crypto/subtle.ConstantTimeCompare`
+  to defeat timing attacks. The 401 response sets a proper
+  `WWW-Authenticate: Basic realm="..."` header.
+- [Feature] Outer-bracket VHost name parser — vhosts whose names contain
+  `[` or `]` are now reported correctly.
+- [Security] HTTP server now sets read/header/write/idle timeouts and a
+  64 KiB header cap to defeat Slowloris-style DoS.
+- [Security] Default `/` handler now rejects non-`GET`/`HEAD` requests,
+  returns `404` for unknown paths, and HTML-escapes `--metrics-service-path`
+  before reflecting it. Uses a dedicated `http.ServeMux` instead of the
+  global default mux (no more accidental pprof exposure on a transitive
+  import).
+- [Security] `cleanupBadFiles` no longer follows symlinks and confines
+  deletions to the directory of `--rtreport`.
+- [Security] PID file is created with mode `0600` using `O_EXCL` and
+  prefers `/run/lsws-prometheus-exporter` over `/tmp` when available.
+- [Security] TLS cert/key flags are validated as regular files; file
+  descriptors no longer leak.
+- [Security] Password file permissions are checked at startup; world- or
+  group-readable files emit a warning when the exporter runs as root.
+- [Security] **No credentials are ever logged**, at any verbosity.
+- [Security] Replaced `prometheus.MustNewConstMetric` with
+  `prometheus.NewConstMetric` + error log so a label cardinality bug can
+  no longer panic the scrape goroutine.
+- [Security] Bumped Go directive to `1.25` and refreshed dependencies.
+  Releases are built with the latest Go 1.25.x patch release; at tag
+  time, `govulncheck ./...` reports **zero** reachable stdlib CVEs.
+  Picks up stdlib fixes accumulated across 1.22→1.25 (HTTP/2
+  CONTINUATION flood, net/netip, net DNS, html/template, x509, gob,
+  archive/zip, net/http chunked-reader, parser stack-exhaustion). The
+  compiled binary is statically linked (`CGO_ENABLED=0`) and still runs
+  on every Linux distro the v0.1.x line supported. Also bumps protobuf
+  past CVE-2024-24786.
+- [Feature] New flag `--litespeed-pid-file` to override the LSWS PID-file
+  probe path.
+- [Feature] New flag `--pid-directory` to override the exporter's own PID
+  directory.
+- [Build] Releases are now published via GitHub Actions with SHA-256
+  sidecars and build-provenance attestations. The `mkdist.sh` script
+  produces reproducible tarballs (sorted entries, fixed mtime, numeric
+  owner) and emits a SHA-256 sidecar.
+- [Compat] Accepts the legacy `--password_file` flag spelling from v0.1.4
+  systemd units, but the canonical name is `--password-file`.
+- [Ops] The bundled systemd unit now includes layered hardening
+  (`NoNewPrivileges`, `ProtectSystem=strict`, `MemoryDenyWriteExecute`,
+  `RestrictAddressFamilies`, `RestrictNamespaces`, `LockPersonality`,
+  `SystemCallArchitectures=native`, etc.) and uses
+  `RuntimeDirectory=lsws-prometheus-exporter` so the PID file lives
+  under `/run` instead of `/tmp`. See *Security considerations* for the
+  hardening checklist.
+- [Docs] New `SECURITY.md` (vulnerability reporting policy, scope,
+  embargo timeline) and `RELEASING.md` (full release procedure,
+  including signed-tag guidance, GitHub Actions pipeline, post-release
+  verification, and hotfix workflow).
+
 ### 0.1.4
-- [Feature] Added support for basic authentication.
-- [Bug Fix] Support nested brackets in the VHost name in the REQ_RATE scrape.
+- [Feature] Initial basic authentication support.
+- [Bug Fix] Support nested brackets in the VHost name in REQ_RATE.
 
 ### 0.1.3
 - [Feature] Make the location of the LiteSpeed real-time report file command line configurable

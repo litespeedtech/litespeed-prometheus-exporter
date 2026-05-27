@@ -146,7 +146,7 @@ getCerts()
 getBasicAuth()
 {
     SUCC=0
-    while [ $SUCC -eq "0" ];  do
+    while [ $SUCC -eq "0" ]; do
         printf "User name for basic auth [ENTER for no basic auth]: "
         read TMP_USER
         if [ "x$TMP_USER" = "x" ]; then
@@ -155,14 +155,27 @@ getBasicAuth()
         else
             SUCC=0
             while [ $SUCC -eq "0" ]; do
-                printf "Password file name: "
+                printf "Password file name (must contain plain-text password): "
                 read TMP_PASS
                 if [ ! -f "$TMP_PASS" ]; then
-                    echo "You must specify a fully qualitified existing file name"
+                    echo "You must specify a fully qualified existing file name"
                 else
+                    # Refuse password files readable by group or other when
+                    # we are running as root. Even a 0644 file in /etc is
+                    # accessible to every local user; this is the most
+                    # common installation footgun.
+                    PERM=$(stat -c '%a' "$TMP_PASS" 2>/dev/null || stat -f '%A' "$TMP_PASS" 2>/dev/null)
+                    if [ "x$PERM" != "x" ]; then
+                        case "$PERM" in
+                            *[1-7][0-7]|*[0-7][1-7])
+                                echo "WARNING: $TMP_PASS has overly permissive mode $PERM."
+                                echo "         Recommend: chmod 0600 $TMP_PASS"
+                                ;;
+                        esac
+                    fi
                     SUCC=1
                     USER_NAME="--username=$TMP_USER"
-                    PASSWORD_FILE="--password_file=$TMP_PASS"
+                    PASSWORD_FILE="--password-file=$TMP_PASS"
                 fi
             done
         fi
@@ -360,9 +373,10 @@ installation()
         SDIR_OWN=$DIR_OWN
         LOGDIR_OWN=$DIR_OWN
     fi
-    sed "s~%CERT_FILE%~$CERT_FILE~;s~%KEY_FILE%~$KEY_FILE~;s~%USER_NAME%~$USER_NAME~;s~%PASSWORD_FILE%~$PASSWORD_FILE~" "$LSINSTALL_DIR/lsws-prometheus-exporter.rc.in" > "$LSWS_HOME/lsws-prometheus-exporter.rc"
-    sed "s~%CERT_FILE%~$CERT_FILE~;s~%KEY_FILE%~$KEY_FILE~;s~%USER_NAME%~$USER_NAME~;s~%PASSWORD_FILE%~$PASSWORD_FILE~" "$LSINSTALL_DIR/lsws-prometheus-exporter.rc.gentoo.in" > "$LSWS_HOME/lsws-prometheus-exporter.rc.gentoo"
-    sed "s~%CERT_FILE%~$CERT_FILE~;s~%KEY_FILE%~$KEY_FILE~;s~%USER_NAME%~$USER_NAME~;s~%PASSWORD_FILE%~$PASSWORD_FILE~" "$LSINSTALL_DIR/lsws-prometheus-exporter.service.in" > "$LSWS_HOME/lsws-prometheus-exporter.service"
+    SED_EXPR="s~%CERT_FILE%~$CERT_FILE~;s~%KEY_FILE%~$KEY_FILE~;s~%USER_NAME%~$USER_NAME~;s~%PASSWORD_FILE%~$PASSWORD_FILE~"
+    sed "$SED_EXPR" "$LSINSTALL_DIR/lsws-prometheus-exporter.rc.in" > "$LSWS_HOME/lsws-prometheus-exporter.rc"
+    sed "$SED_EXPR" "$LSINSTALL_DIR/lsws-prometheus-exporter.rc.gentoo.in" > "$LSWS_HOME/lsws-prometheus-exporter.rc.gentoo"
+    sed "$SED_EXPR" "$LSINSTALL_DIR/lsws-prometheus-exporter.service.in" > "$LSWS_HOME/lsws-prometheus-exporter.service"
     cp $LSINSTALL_DIR/lsws-prometheus-exporter $LSWS_HOME/
     cp $LSINSTALL_DIR/install.sh  $LSWS_HOME/
     cp $LSINSTALL_DIR/functions.sh  $LSWS_HOME/

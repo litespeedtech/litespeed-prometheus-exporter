@@ -4,9 +4,26 @@ After=network-online.target remote-fs.target nss-lookup.target
 Wants=network-online.target
 
 [Service]
-PIDFile=/tmp/lsws-prometheus-exporter/lsws-prometheus-exporter.pid
+PIDFile=/run/lsws-prometheus-exporter/lsws-prometheus-exporter.pid
+RuntimeDirectory=lsws-prometheus-exporter
 ExecStart=/usr/local/lsws-prometheus-exporter/lsws-prometheus-exporter %CERT_FILE% %KEY_FILE% %USER_NAME% %PASSWORD_FILE%
 Restart=always
+
+# Layered hardening — see README "Security considerations".
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+SystemCallArchitectures=native
+ReadWritePaths=/run/lsws-prometheus-exporter
 
 [Install]
 WantedBy=multi-user.target

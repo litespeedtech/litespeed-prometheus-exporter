@@ -1,0 +1,11 @@
+# Local build scratch — committed binaries live in dist/ and at the repo root
+# (we deliberately keep those for git-clone-based installs). Anything below is
+# transient and should not be committed.
+/.omc/
+.vscode/
+.idea/
+.DS_Store
+
+# Go test scratch
+*.test
+*.out
