@@ -19,6 +19,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/base64"
 	"fmt"
 	"io"
 	"net/http"
@@ -44,7 +45,7 @@ type LitespeedCollectorOpts struct {
 	ExcludedMetrics map[string]bool // external name is the key
 	CgroupTry       int
 	LitespeedHome   string
-	RtReport		string
+	RtReport        string
 	FilePattern     string
 }
 
@@ -56,7 +57,57 @@ type LitespeedCollector struct {
 	litespeedCollectorCgroup     *LitespeedCollectorCgroup
 }
 
-func Run(ctx context.Context, addr, metricsPath, metricsExcludedList, tlsCertFile, tlsKeyFile string, cgroupTry int, litespeedHome string, rtReport string) {
+// customMetricsHandler wraps the promhttp.Handler to add custom logic.
+func customMetricsHandler(username string, password string) http.Handler {
+	// Get the default Prometheus handler
+	h := promhttp.Handler()
+
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// You can read request headers here
+		userAgent := r.Header.Get("User-Agent")
+		ok := false
+		if username == "" {
+			ok = true
+		} else {
+			authorization := r.Header.Get("Authorization")
+			klog.V(4).Infof("Metrics request received with User-Agent: %s Authorization: %s\n", userAgent, authorization)
+			if authorization == "" {
+				klog.Errorf("Could not find authorization header")
+				http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+			} else if auth64, found := strings.CutPrefix(authorization, "Basic "); !found {
+				klog.Errorf("Expecting but did not find Basic authorization string")
+				http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+			} else if decodedBytes, err := base64.StdEncoding.DecodeString(string(auth64)); err != nil {
+				klog.Errorf("Could not decode authorization %v %v", string(auth64), err)
+				http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+			} else if auths := strings.SplitN(string(decodedBytes), ":", 2); len(auths) != 2 {
+				klog.Errorf("Could not find authorization sep in %v (%v)", string(decodedBytes), auths)
+				http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+			} else if auths[0] != username {
+				klog.Errorf("Invalid user for metrics request")
+				http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+			} else if auths[1] != password {
+				klog.Errorf("Invalid password for metrics request")
+				http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+				klog.V(4).Infof("%s != %s", auths[1], password)
+			} else {
+				klog.V(4).Infof("Valid basic authentication")
+				ok = true
+			}
+		}
+
+		// You can also set response headers here
+		//w.Header().Set("X-Custom-Header", "Prometheus-Metrics-Endpoint")
+
+		if ok {
+			// Call the actual promhttp.Handler to serve the metrics
+			klog.V(4).Infof("Serving metrics")
+			h.ServeHTTP(w, r)
+		}
+	})
+}
+
+func Run(ctx context.Context, addr, metricsPath, metricsExcludedList, tlsCertFile, tlsKeyFile string, username string, password string, cgroupTry int, litespeedHome string, rtReport string) {
 	excludedMetricFlags := strings.Split(metricsExcludedList, ",")
 	collector := NewLitespeedCollector(
 		LitespeedCollectorOpts{
@@ -66,7 +117,7 @@ func Run(ctx context.Context, addr, metricsPath, metricsExcludedList, tlsCertFil
 			ExcludedMetrics: ParseFlagsToMap(excludedMetricFlags),
 			CgroupTry:       cgroupTry,
 			LitespeedHome:   litespeedHome,
-			RtReport:		 rtReport,
+			RtReport:        rtReport,
 			FilePattern:     rtReport + "*",
 		},
 	)
@@ -74,7 +125,7 @@ func Run(ctx context.Context, addr, metricsPath, metricsExcludedList, tlsCertFil
 
 	klog.V(4).Infof("listenAddr: %v", addr)
 
-	http.Handle(metricsPath, promhttp.Handler())
+	http.Handle(metricsPath, customMetricsHandler(username, password))
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		klog.V(4).Infof("LiteSpeed Prometheus Collector default home page")
 		w.Write([]byte(`
@@ -194,7 +245,7 @@ func (c *LitespeedCollector) Describe(ch chan<- *prometheus.Desc) {
 
 // Collect fetches the stats from target files and delivers them as Prometheus metrics
 func (c *LitespeedCollector) Collect(ch chan<- prometheus.Metric) {
-	//klog.V(4).Infof("collector Collect")
+	klog.V(4).Infof("collector Collect")
 
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
@@ -266,7 +317,11 @@ func (c *LitespeedCollector) collectGeneralInfoMetrics(core string, generalInfo 
 	for flag, value := range generalInfo.KeyValues {
 		if metric, ok := LitespeedMetrics.generalInfoMetrics[flag]; ok {
 			klog.V(4).Infof("generalInfoMetric: %v", metric)
-			ch <- prometheus.MustNewConstMetric(metric.Desc, metric.Type, value, core)
+			if metricOut, err := prometheus.NewConstMetric(metric.Desc, metric.Type, value, core); err != nil {
+				klog.Errorf("Error in collecting generalInfoMetrics: %v: %v", metric, err)
+			} else {
+				ch <- metricOut
+			}
 		}
 	}
 }
@@ -276,7 +331,11 @@ func (c *LitespeedCollector) collectReqRateMetrics(core string, reports []reques
 		for flag, value := range rrReport.KeyValues {
 			if metric, ok := LitespeedMetrics.reqRateMetrics[flag]; ok {
 				klog.V(4).Infof("reqRateMetric: %v, value: %v, core: %v", metric, value, core)
-				ch <- prometheus.MustNewConstMetric(metric.Desc, metric.Type, value, core, rrReport.VHost)
+				if metricOut, err := prometheus.NewConstMetric(metric.Desc, metric.Type, value, core, rrReport.VHost); err != nil {
+					klog.Errorf("Error in collecting reqRateMetric: %v: %v", metric, err)
+				} else {
+					ch <- metricOut
+				}
 			}
 		}
 	}
@@ -287,10 +346,42 @@ func (c *LitespeedCollector) collectExtAppMetrics(core string, reports []externa
 		for flag, value := range eaReport.KeyValues {
 			if metric, ok := LitespeedMetrics.extAppMetrics[flag]; ok {
 				klog.V(4).Infof("extAppMetric: %v, value: %v, core: %v", metric, value, core)
-				ch <- prometheus.MustNewConstMetric(metric.Desc, metric.Type, value, core, eaReport.AppType, eaReport.VHost, eaReport.Handler)
+				if metricOut, err := prometheus.NewConstMetric(metric.Desc, metric.Type, value, core, eaReport.AppType, eaReport.VHost, eaReport.Handler); err != nil {
+					klog.Errorf("Error in collecting ExtAppMetric: %v: %v", metric, err)
+				} else {
+					ch <- metricOut
+				}
 			}
 		}
 	}
+}
+
+func captureOutermostBrackets(s string) string {
+	var result string
+	balance := 0
+	start := -1
+
+	for i, r := range s {
+		switch r {
+		case '[':
+			if balance == 0 {
+				start = i + 1 // Start capturing after the opening bracket
+			}
+			balance++
+		case ']':
+			balance--
+			if balance == 0 && start != -1 {
+				// End capturing before the closing bracket
+				result = s[start:i]
+				start = -1 // Reset start for the next potential outermost bracket set
+			} else if balance < 0 {
+				// Handle malformed strings if necessary (e.g., extra closing bracket)
+				balance = 0
+				start = -1
+			}
+		}
+	}
+	return result
 }
 
 func (c *LitespeedCollector) scrapeFile(fileName string) (report *litespeedReport, err error) {
@@ -354,14 +445,15 @@ func (c *LitespeedCollector) scrapeFile(fileName string) (report *litespeedRepor
 			}
 		case reqRateField:
 			parts := strings.SplitN(line, ": ", 2)
-			matches := ibRegex.FindStringSubmatch(line)
+			//matches := ibRegex.FindStringSubmatch(line)
 
 			m := parseKeyValLineToMap(parts[1])
 			rr := requestRateReport{
-				VHost:     matches[1],
+				//VHost: matches[1],
+				VHost:     captureOutermostBrackets(line),
 				KeyValues: make(map[string]float64),
 			}
-			//klog.V(4).Infof("reqRate report, hostname: %v", matches[1])
+			klog.V(4).Infof("reqRate report, vhost: %v kvs: %v", rr.VHost, m)
 			for k, v := range m {
 				if val, ok := LitespeedMetrics.reqRateMetrics[k]; !ok || !c.metricIsTracked(val.Name) {
 					klog.V(4).Infof("reqRate report skip not found or requested key: %v", k)

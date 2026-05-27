@@ -12,7 +12,7 @@ help()
 {
     printf 'LiteSpeed Prometheus Exporter installation script\n'
     printf 'Form: sudo ./install.sh [-n]\n'
-    printf 'Where "-n" is an optional parameteter for no HTTPS mode\n'
+    printf 'Where "-n" is an optional parameteter for no HTTPS or basic auth\n'
     exit 1
 }
 
@@ -52,6 +52,7 @@ if [ -f "$LSWS_HOME/lsws-prometheus-exporter" ] ; then
 else
     if [ $NOHTTPS -eq 0 ]; then
         getCerts
+        getBasicAuth
     fi
 fi
 
