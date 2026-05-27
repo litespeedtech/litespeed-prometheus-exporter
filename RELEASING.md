@@ -213,7 +213,7 @@ Once the workflow succeeds:
 4. **Test the install flow end-to-end** on a disposable VM or container:
 
    ```
-   curl -fsSL https://raw.githubusercontent.com/litespeedtech/litespeed-prometheus-exporter/main/install.sh \
+   curl -fsSL https://raw.githubusercontent.com/litespeedtech/litespeed-prometheus-exporter/master/install.sh \
      | sudo VERSION=X.Y.Z sh
    systemctl status lsws-prometheus-exporter
    curl http://127.0.0.1:9936/metrics

@@ -1,11 +1,11 @@
 #!/bin/sh
 # One-liner installer for the LiteSpeed Prometheus Exporter.
 #
-#   curl -fsSL https://raw.githubusercontent.com/litespeedtech/litespeed-prometheus-exporter/main/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/litespeedtech/litespeed-prometheus-exporter/master/install.sh | sh
 #
 # Or, to pin a specific version:
 #
-#   curl -fsSL https://raw.githubusercontent.com/litespeedtech/litespeed-prometheus-exporter/main/install.sh | VERSION=0.1.4 sh
+#   curl -fsSL https://raw.githubusercontent.com/litespeedtech/litespeed-prometheus-exporter/master/install.sh | VERSION=0.2.0 sh
 #
 # The script downloads the release tarball from GitHub, verifies its SHA-256
 # against the .sha256 sidecar published alongside it, extracts it, and runs
@@ -73,7 +73,21 @@ tar xzf "${TARBALL}"
 [ -d lsws-prometheus-exporter ] || err "tarball did not contain expected lsws-prometheus-exporter/ directory"
 
 cd lsws-prometheus-exporter
-[ -x ./install.sh ] || err "bundled install.sh not found or not executable"
+[ -f ./install.sh ] || err "bundled install.sh not found in tarball"
 
+# Some sudo configurations (umask 077) or noexec /tmp mounts strip or
+# mask the executable bit when tar extracts. Restore it explicitly so we
+# don't rely on the archive's mode bits surviving the trip.
+chmod +x ./install.sh ./functions.sh ./rc-inst.sh ./rc-uninst.sh ./uninstall.sh ./lsws-prometheus-exporter 2>/dev/null || true
+
+# When invoked via "curl | sh", our stdin is the pipe and sh has already
+# consumed it. The bundled installer prompts for cert/key/auth paths via
+# `read`, which would hit EOF. Re-attach to /dev/tty if available so the
+# user actually sees the prompts; otherwise let `read` get EOF and the
+# script will choose the no-HTTPS / no-basic-auth defaults.
 log "Running bundled install.sh (you may be prompted for cert/key paths)"
-exec ./install.sh "$@"
+if [ -r /dev/tty ]; then
+    exec sh ./install.sh "$@" </dev/tty
+else
+    exec sh ./install.sh "$@"
+fi

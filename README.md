@@ -21,13 +21,13 @@ the `.sha256` sidecar published alongside it, extracts it, and runs the
 bundled service installer:
 
 ```
-curl -fsSL https://raw.githubusercontent.com/litespeedtech/litespeed-prometheus-exporter/main/install.sh | sudo sh
+curl -fsSL https://raw.githubusercontent.com/litespeedtech/litespeed-prometheus-exporter/master/install.sh | sudo sh
 ```
 
 To pin a specific version, set `VERSION`:
 
 ```
-curl -fsSL https://raw.githubusercontent.com/litespeedtech/litespeed-prometheus-exporter/main/install.sh \
+curl -fsSL https://raw.githubusercontent.com/litespeedtech/litespeed-prometheus-exporter/master/install.sh \
   | sudo VERSION=0.2.0 sh
 ```
 
